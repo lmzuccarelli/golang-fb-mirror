@@ -6,7 +6,7 @@ This is a simpler implementation of the functionality found in oc-mirror
 
 As mentioned its still very raw (hence POC) but has the following functionality
 
-All image formnats are in OCI
+All image formats are in OCI
 
 - cincinnati client (release and channel versioning)
 - release downloads to disk from registry

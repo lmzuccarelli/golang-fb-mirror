@@ -16,15 +16,12 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/klog/v2"
-	//"github.com/lmzuccarelli/golang-oci-mirror/pkg/cli"
 )
 
 type RootOptions struct {
 	genericclioptions.IOStreams
-
-	Dir      string
-	LogLevel int
-
+	Dir            string
+	LogLevel       int
 	logfileCleanup func()
 }
 
@@ -70,7 +67,7 @@ func (o *RootOptions) LogfilePreRun(cmd *cobra.Command, _ []string) {
 
 	logrus.SetLevel(logrusLevel)
 	logrus.AddHook(newFileHookWithNewlineTruncate(o.IOStreams.ErrOut, logrusLevel, &logrus.TextFormatter{
-		DisableTimestamp:       true,
+		DisableTimestamp:       false,
 		DisableLevelTruncation: true,
 		DisableQuote:           true,
 	}))

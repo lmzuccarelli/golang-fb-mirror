@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,15 +17,12 @@ import (
 	"github.com/containers/image/v5/signature"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
-)
-
-const (
-	defaultUserAgent = "skopeo/v.19.5"
 )
 
 // errorShouldDisplayUsage is a subtype of error used by command handlers to indicate that cli.ShowSubcommandHelp should be called.
@@ -454,6 +452,7 @@ type GlobalOptions struct {
 	CommandTimeout     time.Duration // Timeout for the command execution
 	RegistriesConfPath string        // Path to the "registries.conf" file
 	TmpDir             string        // Path to use for big temporary files
+	Destination        string        // Destination n terms of image mirror
 }
 
 type CopyOptions struct {
@@ -477,4 +476,42 @@ type CopyOptions struct {
 	EncryptLayer             []int                     // The list of layers to encrypt
 	EncryptionKeys           []string                  // Keys needed to encrypt the image
 	DecryptionKeys           []string                  // Keys needed to decrypt the image
+}
+
+func parseCatalogJson(data []byte) error {
+	var sch *v1alpha3.DeclarativeConfig
+	newJson := strings.NewReplacer(" ", "").Replace(string(data))
+	cmp := strings.Split(newJson, "}\n{")
+	var newCmp string
+	for x := range cmp {
+		switch {
+		case (x == 0):
+			newCmp = cmp[x] + "}"
+		case (x > 0) && (x < (len(cmp) - 1)):
+			newCmp = "{" + cmp[x] + "}"
+		case (x == (len(cmp) - 1)):
+			newCmp = "{" + cmp[x]
+		}
+		err := json.Unmarshal([]byte(newCmp), &sch)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func customImageParser(image string) (*v1alpha3.ImageRefSchema, error) {
+	var irs *v1alpha3.ImageRefSchema
+	var component string
+	parts := strings.Split(image, "/")
+	if len(parts) < 3 {
+		return irs, fmt.Errorf("image url seems to be wrong")
+	}
+	if strings.Contains(parts[2], "@") {
+		component = strings.Split(parts[2], "@")[0]
+	} else {
+		component = parts[2]
+	}
+	irs = &v1alpha3.ImageRefSchema{Repository: parts[0], Namespace: parts[1], Component: component}
+	return irs, nil
 }

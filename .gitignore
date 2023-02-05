@@ -1,3 +1,6 @@
 working-dir/
 build/
 commands.txt
+hold*
+lmz-test
+release-images

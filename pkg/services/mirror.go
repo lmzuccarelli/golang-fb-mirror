@@ -186,9 +186,6 @@ func Run(args []string, opts *CopyOptions, stdout io.Writer) (retErr error) {
 	}
 
 	return retry.IfNecessary(ctx, func() error {
-		//fmt.Println("\tstarting run ... ", destRef)
-		//fmt.Printf("DEBUG LMZ %s", srcRef.DockerReference().Name())
-		//fmt.Printf("DEBUG LMZ %s", destRef.DockerReference().Name())
 		manifestBytes, err := copy.Image(ctx, policyContext, destRef, srcRef, &copy.Options{
 			RemoveSignatures:                 opts.RemoveSignatures,
 			SignBy:                           opts.SignByFingerprint,
@@ -218,8 +215,6 @@ func Run(args []string, opts *CopyOptions, stdout io.Writer) (retErr error) {
 				return fmt.Errorf("Failed to write digest to file %q: %w", opts.DigestFile, err)
 			}
 		}
-		//fmt.Println("\tcompleted run ... ", destRef)
-		//fmt.Println("")
 		return nil
 	}, opts.RetryOpts)
 }

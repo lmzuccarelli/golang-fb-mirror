@@ -17,8 +17,10 @@ mirror:
   operators:
     #- catalog: oci:///home/lzuccarelli/go/src/github.com/openshift/oc-mirror/newlmz/redhat-operator-index
     - catalog: registry.redhat.io/redhat/redhat-operator-index:v4.12
-      #packages:
-      #- name: node-observability-operator
+      packages:
+      - name: aws-load-balancer-operator
+        channels: 
+        - name: stable-v0
   
   additionalImages: 
-    - name: localhost:5000/test/helloworld:v0.0.1
+    - name: registry.redhat.io/ubi8/ubi:latest  

@@ -8,7 +8,7 @@ all: clean test build
 
 build: 
 	mkdir -p build
-	go build -mod=vendor -o build -tags real ./...
+	go build -mod=vendor -o build ./...
 
 build-dev:
 	mkdir -p build
