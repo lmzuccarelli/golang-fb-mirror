@@ -86,84 +86,86 @@ type Status struct {
 
 // OCISchema
 type OCISchema struct {
-	SchemaVersion int    `json:"schemaVersion"`
-	MediaType     string `json:"mediaType"`
-	Manifests     []struct {
-		MediaType string `json:"mediaType"`
-		Digest    string `json:"digest"`
-		Size      int    `json:"size"`
-	} `json:"manifests"`
-	Config struct {
-		MediaType string `json:"mediaType"`
-		Digest    string `json:"digest"`
-		Size      int    `json:"size"`
-	} `json:"config"`
-	Layers []struct {
-		MediaType string `json:"mediaType"`
-		Digest    string `json:"digest"`
-		Size      int    `json:"size"`
-	} `json:"layers"`
+	SchemaVersion int           `json:"schemaVersion"`
+	MediaType     string        `json:"mediaType"`
+	Manifests     []OCIManifest `json:"manifests"`
+	Config        OCIManifest   `json:"config"`
+	Layers        []OCIManifest `json:"layers"`
+}
+
+type OCIManifest struct {
+	MediaType string `json:"mediaType"`
+	Digest    string `json:"digest"`
+	Size      int    `json:"size"`
 }
 
 // OperatorConfigSchema
 type OperatorConfigSchema struct {
-	Created      time.Time `json:"created"`
-	Architecture string    `json:"architecture"`
-	Os           string    `json:"os"`
-	Config       struct {
-		User         string `json:"User"`
-		ExposedPorts struct {
-			TCP struct {
-			} `json:"tcp"`
-		} `json:"ExposedPorts"`
-		Env        []string `json:"Env"`
-		Entrypoint []string `json:"Entrypoint"`
-		Cmd        []string `json:"Cmd"`
-		WorkingDir string   `json:"WorkingDir"`
-		Labels     struct {
-			License                                    string `json:"License"`
-			Architecture                               string `json:"architecture"`
-			BuildDate                                  string `json:"build-date"`
-			ComRedhatBuildHost                         string `json:"com.redhat.build-host"`
-			ComRedhatComponent                         string `json:"com.redhat.component"`
-			ComRedhatIndexDeliveryDistributionScope    string `json:"com.redhat.index.delivery.distribution_scope"`
-			ComRedhatIndexDeliveryVersion              string `json:"com.redhat.index.delivery.version"`
-			ComRedhatLicenseTerms                      string `json:"com.redhat.license_terms"`
-			Description                                string `json:"description"`
-			DistributionScope                          string `json:"distribution-scope"`
-			IoBuildahVersion                           string `json:"io.buildah.version"`
-			IoK8SDescription                           string `json:"io.k8s.description"`
-			IoK8SDisplayName                           string `json:"io.k8s.display-name"`
-			IoOpenshiftBuildCommitID                   string `json:"io.openshift.build.commit.id"`
-			IoOpenshiftBuildCommitURL                  string `json:"io.openshift.build.commit.url"`
-			IoOpenshiftBuildSourceLocation             string `json:"io.openshift.build.source-location"`
-			IoOpenshiftExposeServices                  string `json:"io.openshift.expose-services"`
-			IoOpenshiftMaintainerComponent             string `json:"io.openshift.maintainer.component"`
-			IoOpenshiftMaintainerProduct               string `json:"io.openshift.maintainer.product"`
-			IoOpenshiftMaintainerProject               string `json:"io.openshift.maintainer.project"`
-			IoOpenshiftTags                            string `json:"io.openshift.tags"`
-			Maintainer                                 string `json:"maintainer"`
-			Name                                       string `json:"name"`
-			OperatorsOperatorframeworkIoIndexConfigsV1 string `json:"operators.operatorframework.io.index.configs.v1"`
-			Release                                    string `json:"release"`
-			Summary                                    string `json:"summary"`
-			URL                                        string `json:"url"`
-			VcsRef                                     string `json:"vcs-ref"`
-			VcsType                                    string `json:"vcs-type"`
-			Vendor                                     string `json:"vendor"`
-			Version                                    string `json:"version"`
-		} `json:"Labels"`
-	} `json:"config"`
-	Rootfs struct {
-		Type    string   `json:"type"`
-		DiffIds []string `json:"diff_ids"`
-	} `json:"rootfs"`
-	History []struct {
-		Created    time.Time `json:"created"`
-		Comment    string    `json:"comment,omitempty"`
-		CreatedBy  string    `json:"created_by,omitempty"`
-		EmptyLayer bool      `json:"empty_layer,omitempty"`
-	} `json:"history"`
+	Created      time.Time         `json:"created"`
+	Architecture string            `json:"architecture"`
+	Os           string            `json:"os"`
+	Config       OperatorConfig    `json:"config"`
+	RootFS       OperatorRootFS    `json:"rootfs"`
+	History      []OperatorHistory `json:"history"`
+}
+
+type OperatorConfig struct {
+	User         string `json:"User"`
+	ExposedPorts struct {
+		TCP struct {
+		} `json:"tcp"`
+	} `json:"ExposedPorts"`
+	Env        []string       `json:"Env"`
+	Entrypoint []string       `json:"Entrypoint"`
+	Cmd        []string       `json:"Cmd"`
+	WorkingDir string         `json:"WorkingDir"`
+	Labels     OperatorLabels `json:"Labels"`
+}
+
+type OperatorLabels struct {
+	License                                    string `json:"License"`
+	Architecture                               string `json:"architecture"`
+	BuildDate                                  string `json:"build-date"`
+	ComRedhatBuildHost                         string `json:"com.redhat.build-host"`
+	ComRedhatComponent                         string `json:"com.redhat.component"`
+	ComRedhatIndexDeliveryDistributionScope    string `json:"com.redhat.index.delivery.distribution_scope"`
+	ComRedhatIndexDeliveryVersion              string `json:"com.redhat.index.delivery.version"`
+	ComRedhatLicenseTerms                      string `json:"com.redhat.license_terms"`
+	Description                                string `json:"description"`
+	DistributionScope                          string `json:"distribution-scope"`
+	IoBuildahVersion                           string `json:"io.buildah.version"`
+	IoK8SDescription                           string `json:"io.k8s.description"`
+	IoK8SDisplayName                           string `json:"io.k8s.display-name"`
+	IoOpenshiftBuildCommitID                   string `json:"io.openshift.build.commit.id"`
+	IoOpenshiftBuildCommitURL                  string `json:"io.openshift.build.commit.url"`
+	IoOpenshiftBuildSourceLocation             string `json:"io.openshift.build.source-location"`
+	IoOpenshiftExposeServices                  string `json:"io.openshift.expose-services"`
+	IoOpenshiftMaintainerComponent             string `json:"io.openshift.maintainer.component"`
+	IoOpenshiftMaintainerProduct               string `json:"io.openshift.maintainer.product"`
+	IoOpenshiftMaintainerProject               string `json:"io.openshift.maintainer.project"`
+	IoOpenshiftTags                            string `json:"io.openshift.tags"`
+	Maintainer                                 string `json:"maintainer"`
+	Name                                       string `json:"name"`
+	OperatorsOperatorframeworkIoIndexConfigsV1 string `json:"operators.operatorframework.io.index.configs.v1"`
+	Release                                    string `json:"release"`
+	Summary                                    string `json:"summary"`
+	URL                                        string `json:"url"`
+	VcsRef                                     string `json:"vcs-ref"`
+	VcsType                                    string `json:"vcs-type"`
+	Vendor                                     string `json:"vendor"`
+	Version                                    string `json:"version"`
+}
+
+type OperatorRootFS struct {
+	Type    string   `json:"type"`
+	DiffIds []string `json:"diff_ids"`
+}
+
+type OperatorHistory struct {
+	Created    time.Time `json:"created"`
+	Comment    string    `json:"comment,omitempty"`
+	CreatedBy  string    `json:"created_by,omitempty"`
+	EmptyLayer bool      `json:"empty_layer,omitempty"`
 }
 
 // Package

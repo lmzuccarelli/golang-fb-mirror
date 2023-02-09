@@ -66,12 +66,12 @@ func (o *RootOptions) LogfilePreRun(cmd *cobra.Command, _ []string) {
 	}
 
 	logrus.SetLevel(logrusLevel)
-	logrus.AddHook(newFileHookWithNewlineTruncate(o.IOStreams.ErrOut, logrusLevel, &logrus.TextFormatter{
-		DisableTimestamp:       false,
-		DisableLevelTruncation: true,
-		DisableQuote:           true,
-	}))
-	logrusCleanup := setupFileHook(logFile)
+	//logrus.AddHook(newFileHookWithNewlineTruncate(o.IOStreams.ErrOut, logrusLevel, &logrus.TextFormatter{
+	//	DisableTimestamp:       false,
+	//		DisableLevelTruncation: true,
+	//		DisableQuote:           true,
+	//	}))
+	//	logrusCleanup := setupFileHook(logFile)
 
 	// Add to root IOStream options
 	o.IOStreams = genericclioptions.IOStreams{
@@ -82,7 +82,7 @@ func (o *RootOptions) LogfilePreRun(cmd *cobra.Command, _ []string) {
 
 	o.logfileCleanup = func() {
 		klog.Flush()
-		logrusCleanup()
+		//		logrusCleanup()
 		checkErr(logFile.Close())
 	}
 
@@ -128,35 +128,22 @@ type MirrorOptions struct {
 	cancelCh         <-chan struct{}
 	once             sync.Once
 	continuedOnError bool
+	loglevel         string
 	//remoteRegFuncs   RemoteRegFuncs
 }
 
 func (o *MirrorOptions) BindFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&o.ConfigPath, "config", "c", o.ConfigPath, "Path to imageset configuration file")
-	fs.BoolVar(&o.SkipImagePin, "skip-image-pin", o.SkipImagePin, "Do not replace image tags with digest pins in operator catalogs")
-	fs.StringVar(&o.From, "from", o.From, "Path to an input file (e.g. archived imageset)")
-	fs.BoolVar(&o.ManifestsOnly, "manifests-only", o.ManifestsOnly, "Generate manifests and do not mirror")
+	fs.StringVarP(&o.loglevel, "loglevel", "l", o.loglevel, "Log level one of (info, debug, trace, error)")
 	fs.BoolVar(&o.DryRun, "dry-run", o.DryRun, "Print actions without mirroring images")
-	fs.BoolVar(&o.SourceSkipTLS, "source-skip-tls", o.SourceSkipTLS, "Disable TLS validation for source registry")
-	fs.BoolVar(&o.DestSkipTLS, "dest-skip-tls", o.DestSkipTLS, "Disable TLS validation for destination registry")
-	fs.BoolVar(&o.SourcePlainHTTP, "source-use-http", o.SourcePlainHTTP, "Use plain HTTP for source registry")
-	fs.BoolVar(&o.DestPlainHTTP, "dest-use-http", o.DestPlainHTTP, "Use plain HTTP for destination registry")
 	fs.BoolVar(&o.SkipVerification, "skip-verification", o.SkipVerification, "Skip verifying the integrity of the retrieved content."+
 		"This is not recommended, but may be necessary when importing images from older image registries."+
 		"Only bypass verification if the registry is known to be trustworthy.")
-	fs.BoolVar(&o.SkipCleanup, "skip-cleanup", o.SkipCleanup, "Skip removal of artifact directories")
-	fs.BoolVar(&o.IgnoreHistory, "ignore-history", o.IgnoreHistory, "Ignore past mirrors when downloading images and packing layers")
-	fs.BoolVar(&o.SkipMetadataCheck, "skip-metadata-check", o.SkipMetadataCheck, "Skip metadata when publishing an imageset."+
-		"This is only recommended when the imageset was created --ignore-history")
 	fs.BoolVar(&o.ContinueOnError, "continue-on-error", o.ContinueOnError, "If an error occurs, keep going "+
 		"and attempt to complete operations if possible")
 	fs.BoolVar(&o.SkipMissing, "skip-missing", o.SkipMissing, "If an input image is not found, skip them. "+
 		"404/NotFound errors encountered while pulling images explicitly specified in the config "+
 		"will not be skipped")
-	fs.IntVar(&o.MaxPerRegistry, "max-per-registry", 6, "Number of concurrent requests allowed per registry")
-	fs.BoolVar(&o.UseOCIFeature, "use-oci-feature", o.UseOCIFeature, "Use the new oci feature for oc mirror (oci formatted copy")
-	fs.StringVar(&o.OCIRegistriesConfig, "oci-registries-config", o.OCIRegistriesConfig, "Registries config file location (used only with --use-oci-feature flag)")
-	fs.BoolVar(&o.OCIInsecureSignaturePolicy, "oci-insecure-signature-policy", o.OCIInsecureSignaturePolicy, "If set, OCI catalog push will not try to push signatures")
 }
 
 func (o *MirrorOptions) init() {

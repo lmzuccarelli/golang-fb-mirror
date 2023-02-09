@@ -9,8 +9,11 @@ import (
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
-	"github.com/microlib/simple"
+	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 	"github.com/spf13/cobra"
 )
 
@@ -38,6 +41,16 @@ var (
 	)
 )
 
+// Executor
+type Executor struct {
+	Log      clog.PluggableLoggerInterface
+	Mirror   mirror.MirrorInterface
+	Manifest manifest.ManifestInterface
+	Config   v1alpha2.ImageSetConfiguration
+	Opts     mirror.CopyOptions
+}
+
+// NewMirrorCmd - cobra entry point
 func NewMirrorCmd() *cobra.Command {
 	o := MirrorOptions{}
 
@@ -65,56 +78,89 @@ func NewMirrorCmd() *cobra.Command {
 	return cmd
 }
 
+// Run - start the mirror functionality
 func (o *MirrorOptions) Run(cmd *cobra.Command, args []string) error {
-	logger := &simple.Logger{Level: "debug"}
+
+	// setup pluggable logger
+	// feel free to plugin you own logger
+	// just use the PluggableLoggerInterface
+	// in the file pkg/log.go
+	log := clog.New("debug")
+
+	// read the ImageSetConfiguration
 	cfg, err := config.ReadConfig(o.ConfigPath)
 	if err != nil {
-		logger.Error(fmt.Sprintf("imagesetconfig %v ", err))
+		log.Error("imagesetconfig %v ", err)
 	}
-	logger.Debug(fmt.Sprintf("imagesetconfig : %v", cfg))
+	log.Debug("imagesetconfig : %v", cfg)
 
-	global := &GlobalOptions{Debug: true, TlsVerify: false, InsecurePolicy: true, Destination: args[0]}
-	_, sharedOpts := SharedImageFlags()
-	_, deprecatedTLSVerifyOpt := DeprecatedTLSVerifyFlags()
-	_, srcOpts := ImageFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "src-", "screds")
-	_, destOpts := ImageDestFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "dest-", "dcreds")
-	_, retryOpts := RetryFlags()
-	opts := CopyOptions{
+	global := &mirror.GlobalOptions{
+		Debug:          true,
+		TlsVerify:      false,
+		InsecurePolicy: true,
+	}
+
+	_, sharedOpts := mirror.SharedImageFlags()
+	_, deprecatedTLSVerifyOpt := mirror.DeprecatedTLSVerifyFlags()
+	_, srcOpts := mirror.ImageFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "src-", "screds")
+	_, destOpts := mirror.ImageDestFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "dest-", "dcreds")
+	_, retryOpts := mirror.RetryFlags()
+
+	opts := mirror.CopyOptions{
 		Global:              global,
 		DeprecatedTLSVerify: deprecatedTLSVerifyOpt,
 		SrcImage:            srcOpts,
 		DestImage:           destOpts,
 		RetryOpts:           retryOpts,
+		Destination:         args[0],
+		Dev:                 false,
+	}
+
+	// logic to check mode
+	if strings.Contains(args[0], ociProtocol) {
+		opts.Mode = mirrorToDisk
+	} else if strings.Contains(args[0], dockerProtocol) {
+		opts.Mode = diskToMirror
+	}
+
+	log.Info("mode %s ", opts.Mode)
+
+	executor := &Executor{
+		Log:      log,
+		Mirror:   mirror.New(),
+		Manifest: manifest.New(log),
+		Config:   cfg,
+		Opts:     opts,
 	}
 
 	// ensure working dir exists
 	err = os.MkdirAll("working-dir", 0755)
 	if err != nil {
-		logger.Error(fmt.Sprintf(" %v ", err))
+		log.Error(" %v ", err)
 		os.Exit(1)
 	}
 
 	// do releases
 	if len(cfg.Mirror.Platform.Channels) > 10 {
-		err = ExecuteRelease(logger, cfg, opts)
+		err = executor.ExecuteRelease(cmd.Context())
 		if err != nil {
-			logger.Error(fmt.Sprintf("executing release copy %v ", err))
+			log.Error(fmt.Sprintf("executing release copy %v ", err))
 			os.Exit(1)
 		}
 	}
 
 	// do operators
 	if len(cfg.Mirror.Operators) > 0 {
-		err = ExecuteOperators(logger, cfg, opts)
+		err = executor.ExecuteOperators(cmd.Context())
 		if err != nil {
-			logger.Error(fmt.Sprintf("executing release copy %v ", err))
+			log.Error(fmt.Sprintf("executing operator copy %v ", err))
 			os.Exit(1)
 		}
-
 	}
 	return nil
 }
 
+// Validate - cobra validation
 func (o *MirrorOptions) Validate(dest string) error {
 	if strings.Contains(dest, "oci:") || strings.Contains(dest, "docker://") {
 		return nil

@@ -12,7 +12,7 @@ require (
 	github.com/docker/distribution v2.8.1+incompatible
 	github.com/google/go-containerregistry v0.13.0
 	github.com/google/uuid v1.3.0
-	github.com/microlib/simple v1.0.1
+	github.com/microlib/simple v1.0.2
 	github.com/opencontainers/image-spec v1.1.0-rc2
 	github.com/openshift/library-go v0.0.0-20230130232623-47904dd9ff5a
 	github.com/operator-framework/operator-registry v1.26.3

@@ -75,7 +75,7 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
 
 					// Update version to release channel
 					ch.MaxVersion = latest.String()
-					fmt.Printf("Detected minimum version as %s", ch.MaxVersion)
+					fmt.Printf("detected minimum version as %s", ch.MaxVersion)
 					if len(ch.MinVersion) == 0 && ch.IsHeadsOnly() {
 						//min, found := prevChannels[ch.Name]
 						//if !found {
@@ -83,7 +83,7 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
 						min := latest.String()
 						//}
 						ch.MinVersion = min
-						fmt.Printf("Detected minimum version as %s\n", ch.MinVersion)
+						fmt.Printf("detected minimum version as %s\n", ch.MinVersion)
 					}
 				}
 
@@ -96,13 +96,13 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
 						continue
 					}
 					ch.MinVersion = first.String()
-					fmt.Printf("Detected minimum version as %s\n", ch.MinVersion)
+					fmt.Printf("detected minimum version as %s\n", ch.MinVersion)
 				}
 				versionsByChannel[ch.Name] = ch
 			} else {
 				// Range is set. Ensure full is true so this
 				// is skipped when processing release metadata.
-				fmt.Printf("Processing minimum version %s and maximum version %s\n", ch.MinVersion, ch.MaxVersion)
+				fmt.Printf("processing minimum version %s and maximum version %s\n", ch.MinVersion, ch.MaxVersion)
 				ch.Full = true
 				versionsByChannel[ch.Name] = ch
 			}

@@ -4,56 +4,50 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
-	"sync"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	"github.com/microlib/simple"
 )
 
-func ExecuteRelease(logger *simple.Logger, cfg v1alpha2.ImageSetConfiguration, opts CopyOptions) error {
+func (o *Executor) ExecuteRelease(ctx context.Context) error {
 
 	mo := MirrorOptions{}
 	writer := bufio.NewWriter(os.Stdout)
-	ctx := context.Background()
 
 	releaseOpts := NewReleaseOptions(&mo)
-	releases := releaseOpts.Run(ctx, &cfg)
+	releases := releaseOpts.Run(ctx, &o.Config)
 
 	for key := range releases {
-		args := []string{dockerProtocol + key, ociProtocol + workingDir + releaseImageDir, "true"}
-		logger.Info(fmt.Sprintf("copying image %s ", key))
-		err := Run(args, &opts, writer)
+		//args := []string{dockerProtocol + key, ociProtocol + workingDir + releaseImageDir, "true"}
+		o.Log.Info("copying image %s ", key)
+		src := dockerProtocol + key
+		dest := ociProtocol + workingDir + releaseImageDir
+		err := o.Mirror.Run(ctx, src, dest, &o.Opts, writer)
 		if err != nil {
-			logger.Error(fmt.Sprintf(" %v ", err))
+			o.Log.Error(" %v ", err)
 		}
 	}
 
-	oci, err := GetImageIndex(workingDir + releaseImageDir)
+	oci, err := o.Manifest.GetImageIndex(workingDir + releaseImageDir)
 	if err != nil {
-		logger.Error(fmt.Sprintf(" %v ", err))
+		o.Log.Error(" %v ", err)
 		return err
 	}
 
 	//read the link to the manifest
 	manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
-	logger.Info(fmt.Sprintf("manifest %v", manifest))
+	o.Log.Info("manifest %v", manifest)
 
-	oci, err = GetImageManifest(workingDir + releaseImageDir + blobsDir + manifest)
+	oci, err = o.Manifest.GetImageManifest(workingDir + releaseImageDir + blobsDir + manifest)
 	if err != nil {
-		logger.Error(fmt.Sprintf(" %v ", err))
+		o.Log.Error(" %v ", err)
 		return err
 	}
 
-	for _, blob := range oci.Layers {
-		f, err := os.Open(workingDir + releaseImageDir + blobsDir + strings.Split(blob.Digest, ":")[1])
-		err = UntarLayers(f, releaseImageExtractDir, releaseManifests)
-		if err != nil {
-			logger.Error(fmt.Sprintf(" %v ", err))
-		}
+	err = o.Manifest.ExtractLayersOCI(releaseImageExtractDir, releaseManifests, oci)
+	if err != nil {
+		o.Log.Error(" %v ", err)
 	}
 
 	var release = v1alpha3.ReleaseSchema{}
@@ -61,78 +55,44 @@ func ExecuteRelease(logger *simple.Logger, cfg v1alpha2.ImageSetConfiguration, o
 	file, _ := os.ReadFile(workingDir + releaseImageExtractFullPath)
 	err = json.Unmarshal([]byte(file), &release)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Unmarshaling to struct %v", err))
+		o.Log.Error("Unmarshaling to struct %v", err)
 	}
 
-	loop := len(release.Spec.Tags) / BATCH_SIZE
-	logger.Info(fmt.Sprintf("Images to mirror %d", len(release.Spec.Tags)))
-	logger.Info(fmt.Sprintf("Batch size %d", BATCH_SIZE))
-	logger.Info(fmt.Sprintf("Total batches %d", loop))
-
+	var allImages []v1alpha3.RelatedImage
 	for _, item := range release.Spec.Tags {
-		logger.Info(fmt.Sprintf("  %s ", item.Name))
+		o.Log.Info("  %s ", item.Name)
+		allImages = append(allImages, v1alpha3.RelatedImage{Image: item.Name})
 	}
 
-	fmt.Println(" ")
-
-	// main loop
-	fmt.Println(" ")
-	var errArray []error
-	var wg sync.WaitGroup
-	wg.Add(BATCH_SIZE)
-	for i := 0; i < loop; i++ {
-		logger.Info(fmt.Sprintf("starting batch %d ", i))
-		for batch := 0; batch < BATCH_SIZE; batch++ {
-			index := (i * BATCH_SIZE) + batch
-			args := []string{dockerProtocol + release.Spec.Tags[index].From.Name, ociProtocol + workingDir + "test-lmz/" + release.Spec.Tags[index].Name, "true"}
-			logger.Debug(fmt.Sprintf("mirroring image %s -> %s", release.Spec.Tags[index].Name, strings.Split(release.Spec.Tags[index].From.Name, ":")[1]))
-			go func() {
-				defer wg.Done()
-				err := Run(args, &opts, writer)
-				if err != nil {
-					errArray = append(errArray, err)
-					logger.Error(fmt.Sprintf("%v", err))
-				}
-				writer.Flush()
-			}()
-		}
-		wg.Wait()
-		if len(errArray) > 0 {
-			for _, err := range errArray {
-				logger.Error(fmt.Sprintf("%v", err))
-			}
-		}
-		logger.Info(fmt.Sprintf("completed batch %d", i))
-		wg.Add(BATCH_SIZE)
-		fmt.Println(" ")
+	var batch *BatchSchema
+	images := len(release.Spec.Tags)
+	if images < BATCH_SIZE {
+		batch = &BatchSchema{items: images, count: 1, batchSize: images, batchIndex: 0, remainder: 0}
+	} else {
+		batch = &BatchSchema{items: images, count: (images / BATCH_SIZE), batchSize: BATCH_SIZE, remainder: (images % BATCH_SIZE)}
 	}
+	batch.copyImages = allImages
+	batch.Writer = writer
 
-	remainder := len(release.Spec.Tags) % BATCH_SIZE
+	//TODO
+	// add these in the BatchWorker
+	// src := dockerProtocol + release.Spec.Tags[index].From.Name
+	//	dest := strings.Split(release.Spec.Tags[index].From.Name, ":")[1]
 
-	// complete remainder
-	var wgRemainder sync.WaitGroup
-	wgRemainder.Add(remainder)
-	logger.Info(fmt.Sprintf("starting batch %d  (remainder)", loop))
-	for batch := 0; batch < remainder; batch++ {
-		index := (loop * BATCH_SIZE) + batch
-		args := []string{dockerProtocol + release.Spec.Tags[index].From.Name, ociProtocol + workingDir + "test-lmz/" + release.Spec.Tags[index].Name, "true"}
-		logger.Debug(fmt.Sprintf("mirroring image %s -> %s", release.Spec.Tags[index].Name, strings.Split(release.Spec.Tags[index].From.Name, ":")[1]))
-		go func() {
-			defer wgRemainder.Done()
-			err := Run(args, &opts, writer)
-			if err != nil {
-				errArray = append(errArray, err)
-				logger.Error(fmt.Sprintf("%v", err))
-			}
-			writer.Flush()
-		}()
+	//call the batch executioner
+	err = o.BatchWorker(ctx, batch, o.Opts)
+	if err != nil {
+		return err
 	}
-	wgRemainder.Wait()
-	if len(errArray) > 0 {
-		for _, err := range errArray {
-			logger.Error(fmt.Sprintf("%v", err))
+	if batch.remainder > 0 {
+		batch.batchIndex = batch.count
+		batch.count = batch.remainder
+		batch.batchSize = 1
+		err := o.BatchWorker(ctx, batch, o.Opts)
+		if err != nil {
+			return err
 		}
 	}
-	logger.Info(fmt.Sprintf("completed batch %d (remainder)", loop))
+	writer.Flush()
 	return nil
 }

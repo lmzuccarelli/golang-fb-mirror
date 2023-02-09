@@ -1,4 +1,4 @@
-package services
+package mirror
 
 import (
 	"context"
@@ -24,6 +24,8 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
 )
+
+const defaultUserAgent string = "skopeo/v.19.5"
 
 // errorShouldDisplayUsage is a subtype of error used by command handlers to indicate that cli.ShowSubcommandHelp should be called.
 type ErrorShouldDisplayUsage struct {
@@ -452,7 +454,6 @@ type GlobalOptions struct {
 	CommandTimeout     time.Duration // Timeout for the command execution
 	RegistriesConfPath string        // Path to the "registries.conf" file
 	TmpDir             string        // Path to use for big temporary files
-	Destination        string        // Destination n terms of image mirror
 }
 
 type CopyOptions struct {
@@ -476,6 +477,9 @@ type CopyOptions struct {
 	EncryptLayer             []int                     // The list of layers to encrypt
 	EncryptionKeys           []string                  // Keys needed to encrypt the image
 	DecryptionKeys           []string                  // Keys needed to decrypt the image
+	Mode                     string                    // 2 options disktoMirror or mirrorToDisk (for now)
+	Dev                      bool                      // developer mode - will be removed when completed
+	Destination              string                    // what to target to
 }
 
 func parseCatalogJson(data []byte) error {
@@ -498,20 +502,4 @@ func parseCatalogJson(data []byte) error {
 		}
 	}
 	return nil
-}
-
-func customImageParser(image string) (*v1alpha3.ImageRefSchema, error) {
-	var irs *v1alpha3.ImageRefSchema
-	var component string
-	parts := strings.Split(image, "/")
-	if len(parts) < 3 {
-		return irs, fmt.Errorf("image url seems to be wrong")
-	}
-	if strings.Contains(parts[2], "@") {
-		component = strings.Split(parts[2], "@")[0]
-	} else {
-		component = parts[2]
-	}
-	irs = &v1alpha3.ImageRefSchema{Repository: parts[0], Namespace: parts[1], Component: component}
-	return irs, nil
 }

@@ -1,7 +1,7 @@
-package services
+package mirror
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -36,18 +36,18 @@ func parseMultiArch(multiArch string) (copy.ImageListSelection, error) {
 	}
 }
 
-func Run(args []string, opts *CopyOptions, stdout io.Writer) (retErr error) {
-	if len(args) != 3 {
-		//return schema.ErrorShouldDisplayUsage{
-		return errors.New("Exactly three arguments expected")
-		//}
-	}
+func Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
+	//if len(args) !=
+	//return schema.ErrorShouldDisplayUsage{
+	//		return errors.New("Exactly three arguments expected")
+	//}
+	//}
 	opts.DeprecatedTLSVerify.WarnIfUsed([]string{"--src-tls-verify", "--dest-tls-verify"})
-	imageNames := args
+	//	imageNames := args
 
-	opts.RemoveSignatures, _ = strconv.ParseBool(args[2])
+	opts.RemoveSignatures, _ = strconv.ParseBool("true")
 
-	if err := ReexecIfNecessaryForImages(imageNames...); err != nil {
+	if err := ReexecIfNecessaryForImages([]string{src, dest}...); err != nil {
 		return err
 	}
 
@@ -61,13 +61,13 @@ func Run(args []string, opts *CopyOptions, stdout io.Writer) (retErr error) {
 		}
 	}()
 
-	srcRef, err := alltransports.ParseImageName(imageNames[0])
+	srcRef, err := alltransports.ParseImageName(src)
 	if err != nil {
-		return fmt.Errorf("Invalid source name %s: %v", imageNames[0], err)
+		return fmt.Errorf("Invalid source name %s: %v", src, err)
 	}
-	destRef, err := alltransports.ParseImageName(imageNames[1])
+	destRef, err := alltransports.ParseImageName(dest)
 	if err != nil {
-		return fmt.Errorf("Invalid destination name %s: %v", imageNames[1], err)
+		return fmt.Errorf("Invalid destination name %s: %v", dest, err)
 	}
 
 	sourceCtx, err := opts.SrcImage.NewSystemContext()
