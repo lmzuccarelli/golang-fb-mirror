@@ -1,4 +1,4 @@
-package services
+package operator
 
 import (
 	"bufio"
@@ -7,20 +7,58 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 )
 
 const (
 	catalogJson string = "catalog.json"
 	// TODO: make this global
-	operatorImageExtractDir string = "hold-operator"
+	operatorImageExtractDir     string = "hold-operator"
+	workingDir                  string = "working-dir/"
+	dockerProtocol              string = "docker://"
+	ociProtocol                 string = "oci:"
+	releaseImageDir             string = "release-images"
+	operatorImageDir            string = "operator-images"
+	releaseImageExtractDir      string = "hold-release"
+	releaseManifests            string = "release-manifests"
+	imageReferences             string = "image-references"
+	releaseImageExtractFullPath string = releaseImageExtractDir + "/" + releaseManifests + "/" + imageReferences
+	blobsDir                    string = "/blobs/sha256/"
+	BATCH_SIZE                  int    = 8
+	diskToMirror                string = "diskToMirror"
+	mirrorToDisk                string = "mirrorToDisk"
 )
+
+type CollectorInterface interface {
+	OperatorImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error)
+}
+
+func New(log clog.PluggableLoggerInterface,
+	config v1alpha2.ImageSetConfiguration,
+	opts mirror.CopyOptions,
+	mirror mirror.MirrorInterface,
+	manifest manifest.ManifestInterface,
+) CollectorInterface {
+	return &Collector{Log: log, Config: config, Opts: opts, Mirror: mirror, Manifest: manifest}
+}
+
+type Collector struct {
+	Log      clog.PluggableLoggerInterface
+	Mirror   mirror.MirrorInterface
+	Manifest manifest.ManifestInterface
+	Config   v1alpha2.ImageSetConfiguration
+	Opts     mirror.CopyOptions
+}
 
 // OperatorImageCollector - this looks into the operator index image
 // taking into account the mode we are in (mirrorToDisk, diskToMirror)
 // the image is downloaded (oci format) and the index.json is inspected
 // once unmarshalled, the links to manifests are inspected
-func (o *Executor) OperatorImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error) {
+func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error) {
 
 	var allRelatedImages []v1alpha3.RelatedImage
 	compare := make(map[string]v1alpha3.ISCPackage)

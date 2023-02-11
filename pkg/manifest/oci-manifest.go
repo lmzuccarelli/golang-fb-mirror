@@ -30,6 +30,7 @@ type ManifestInterface interface {
 	GetRelatedImagesFromCatalogByFilter(filePath, label string, op v1alpha2.Operator, mp map[string]v1alpha3.ISCPackage) (map[string][]v1alpha3.RelatedImage, error)
 	ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISchema) error
 	ExtractLayers(filePath, name, label string) error
+	GetReleaseSchema(filePath string) ([]v1alpha3.RelatedImage, error)
 }
 
 type Manifest struct {
@@ -84,6 +85,7 @@ func (o *Manifest) GetOperatorConfig(file string) (*v1alpha3.OperatorConfigSchem
 }
 
 // poperatorImageExtractDir + "/" + label
+// GetRelatedImagesFromCatalog
 func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[string][]v1alpha3.RelatedImage, error) {
 	relatedImages := make(map[string][]v1alpha3.RelatedImage)
 	files, err := os.ReadDir(filePath)
@@ -109,6 +111,7 @@ func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[stri
 	return relatedImages, nil
 }
 
+// GetRelatedImagesFromCatalogByFilter
 func (o *Manifest) GetRelatedImagesFromCatalogByFilter(filePath, label string, op v1alpha2.Operator, mp map[string]v1alpha3.ISCPackage) (map[string][]v1alpha3.RelatedImage, error) {
 	relatedImages := make(map[string][]v1alpha3.RelatedImage)
 	for _, pkg := range op.Packages {
@@ -133,6 +136,7 @@ func (o *Manifest) GetRelatedImagesFromCatalogByFilter(filePath, label string, o
 	return relatedImages, nil
 }
 
+// ExtractLayersOCI
 func (o *Manifest) ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISchema) error {
 	for _, blob := range oci.Layers {
 		if !strings.Contains(blob.Digest, "sha256") {
@@ -147,6 +151,7 @@ func (o *Manifest) ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISch
 	return nil
 }
 
+// ExtractLayers
 func (o *Manifest) ExtractLayers(filePath, name, label string) error {
 	f, err := os.Open(filePath)
 	err = untar(f, filePath+"/"+name, label)
@@ -154,6 +159,23 @@ func (o *Manifest) ExtractLayers(filePath, name, label string) error {
 		return err
 	}
 	return nil
+}
+
+// GetReleaseSchema
+func (o *Manifest) GetReleaseSchema(filePath string) ([]v1alpha3.RelatedImage, error) {
+	var release = v1alpha3.ReleaseSchema{}
+
+	file, _ := os.ReadFile(filePath)
+	err := json.Unmarshal([]byte(file), &release)
+	if err != nil {
+		return []v1alpha3.RelatedImage{}, err
+	}
+
+	var allImages []v1alpha3.RelatedImage
+	for _, item := range release.Spec.Tags {
+		allImages = append(allImages, v1alpha3.RelatedImage{Image: item.Name})
+	}
+	return allImages, nil
 }
 
 // UntarLayers simple function that untars the image layers

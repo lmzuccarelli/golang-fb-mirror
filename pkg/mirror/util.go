@@ -17,6 +17,7 @@ import (
 	"github.com/containers/image/v5/signature"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
+	"github.com/google/uuid"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
@@ -61,10 +62,10 @@ func NoteCloseFailure(err error, description string, closeErr error) error {
 func CommandAction(handler func(args []string, stdout io.Writer) error) func(cmd *cobra.Command, args []string) error {
 	return func(c *cobra.Command, args []string) error {
 		err := handler(args, c.OutOrStdout())
-		var shouldDisplayUsage ErrorShouldDisplayUsage
-		if errors.As(err, &shouldDisplayUsage) {
-			return c.Help()
-		}
+		//var shouldDisplayUsage = &ErrorShouldDisplayUsage{}
+		//if errors.As(err, &ErrorShouldDisplayUsage{}) {
+		//	return c.Help()
+		//}
 		return err
 	}
 }
@@ -454,6 +455,7 @@ type GlobalOptions struct {
 	CommandTimeout     time.Duration // Timeout for the command execution
 	RegistriesConfPath string        // Path to the "registries.conf" file
 	TmpDir             string        // Path to use for big temporary files
+	ConfigPath         string        // Path to use for imagesetconfig
 }
 
 type CopyOptions struct {
@@ -480,6 +482,7 @@ type CopyOptions struct {
 	Mode                     string                    // 2 options disktoMirror or mirrorToDisk (for now)
 	Dev                      bool                      // developer mode - will be removed when completed
 	Destination              string                    // what to target to
+	UUID                     uuid.UUID                 // set uuid
 }
 
 func parseCatalogJson(data []byte) error {

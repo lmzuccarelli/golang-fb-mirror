@@ -1,59 +1,48 @@
-package services
+package release
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/blang/semver/v4"
-	"github.com/google/uuid"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/cincinnati"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 )
 
-// ReleaseOptions configures either a Full or Diff mirror operation
-// on a particular release image.
-type ReleaseOptions struct {
-	*MirrorOptions
-	// insecure indicates whether the source
-	// registry is insecure
-	insecure bool
-	uuid     uuid.UUID
+type CincinnatiInterface interface {
+	GetReleaseReferenceImages(ctx context.Context) map[string]struct{}
 }
 
-// NewReleaseOptions defaults ReleaseOptions.
-func NewReleaseOptions(mo *MirrorOptions) *ReleaseOptions {
-	relOpts := &ReleaseOptions{
-		MirrorOptions: mo,
-		uuid:          uuid.New(),
-	}
-	if mo.SourcePlainHTTP || mo.SourceSkipTLS {
-		relOpts.insecure = true
-	}
-	return relOpts
+func NewCincinnati(config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions) CincinnatiInterface {
+	return &CincinnatiSchema{Config: config, Opts: opts}
 }
 
-func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfiguration) map[string]struct{} {
+type CincinnatiSchema struct {
+	Config *v1alpha2.ImageSetConfiguration
+	Opts   *mirror.CopyOptions
+}
+
+func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[string]struct{} {
 
 	var (
-		//srcDir           = filepath.Join(o.Dir, config.SourceDir)
 		releaseDownloads = downloads{}
-		//mmapping         = image.TypedImageMapping{}
-		errs = []error{}
+		errs             = []error{}
 	)
 
-	for _, arch := range cfg.Mirror.Platform.Architectures {
+	for _, arch := range o.Config.Mirror.Platform.Architectures {
 
-		versionsByChannel := make(map[string]v1alpha2.ReleaseChannel, len(cfg.Mirror.Platform.Channels))
+		versionsByChannel := make(map[string]v1alpha2.ReleaseChannel, len(o.Config.Mirror.Platform.Channels))
 
-		for _, ch := range cfg.Mirror.Platform.Channels {
+		for _, ch := range o.Config.Mirror.Platform.Channels {
 
 			var client cincinnati.Client
 			var err error
 			switch ch.Type {
 			case v1alpha2.TypeOCP:
-				client, err = cincinnati.NewOCPClient(o.uuid)
+				client, err = cincinnati.NewOCPClient(o.Opts.UUID)
 			case v1alpha2.TypeOKD:
-				client, err = cincinnati.NewOKDClient(o.uuid)
+				client, err = cincinnati.NewOKDClient(o.Opts.UUID)
 			default:
 				errs = append(errs, fmt.Errorf("invalid platform type %v", ch.Type))
 				continue
@@ -107,7 +96,7 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
 				versionsByChannel[ch.Name] = ch
 			}
 
-			downloads, err := o.getChannelDownloads(ctx, client, nil, ch, arch)
+			downloads, err := getChannelDownloads(ctx, client, nil, ch, arch)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -118,20 +107,20 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
 
 		// Update cfg release channels with maximum and minimum versions
 		// if applicable
-		for i, ch := range cfg.Mirror.Platform.Channels {
+		for i, ch := range o.Config.Mirror.Platform.Channels {
 			ch, found := versionsByChannel[ch.Name]
 			if found {
-				cfg.Mirror.Platform.Channels[i] = ch
+				o.Config.Mirror.Platform.Channels[i] = ch
 			}
 		}
 
-		if len(cfg.Mirror.Platform.Channels) > 1 {
-			client, err := cincinnati.NewOCPClient(o.uuid)
+		if len(o.Config.Mirror.Platform.Channels) > 1 {
+			client, err := cincinnati.NewOCPClient(o.Opts.UUID)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
-			newDownloads, err := o.getCrossChannelDownloads(ctx, client, arch, cfg.Mirror.Platform.Channels)
+			newDownloads, err := getCrossChannelDownloads(ctx, client, arch, o.Config.Mirror.Platform.Channels)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error calculating cross channel upgrades: %v", err))
 				continue
@@ -139,7 +128,6 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
 			releaseDownloads.Merge(newDownloads)
 		}
 	}
-
 	return releaseDownloads
 }
 
@@ -159,7 +147,7 @@ func (d downloads) Merge(in downloads) {
 var b []byte
 
 // getDownloads will prepare the downloads map for mirroring
-func (o *ReleaseOptions) getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) {
+func getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) {
 	allDownloads := downloads{}
 
 	var prevChannel v1alpha2.ReleaseChannel
@@ -246,7 +234,7 @@ func (o *ReleaseOptions) getChannelDownloads(ctx context.Context, c cincinnati.C
 }
 
 // getCrossChannelDownloads will determine required downloads between channel versions (for OCP only)
-func (o *ReleaseOptions) getCrossChannelDownloads(ctx context.Context, ocpClient cincinnati.Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) {
+func getCrossChannelDownloads(ctx context.Context, ocpClient cincinnati.Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) {
 	// Strip any OKD channels from the list
 
 	var ocpChannels []v1alpha2.ReleaseChannel

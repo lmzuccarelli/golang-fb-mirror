@@ -17,33 +17,28 @@ import (
 	"github.com/docker/distribution/reference"
 )
 
-func parseMultiArch(multiArch string) (copy.ImageListSelection, error) {
-	switch multiArch {
-	case "system":
-		return copy.CopySystemImage, nil
-	case "all":
-		return copy.CopyAllImages, nil
-	// There is no CopyNoImages value in copy.ImageListSelection, but because we
-	// don't provide an option to select a set of images to copy, we can use
-	// CopySpecificImages.
-	case "index-only":
-		return copy.CopySpecificImages, nil
-	// We don't expose CopySpecificImages other than index-only above, because
-	// we currently don't provide an option to choose the images to copy. That
-	// could be added in the future.
-	default:
-		return copy.CopySystemImage, fmt.Errorf("unknown multi-arch option %q. Choose one of the supported options: 'system', 'all', or 'index-only'", multiArch)
-	}
+// MirrorInterface  used to mirror images with container/images (skopeo)
+type MirrorInterface interface {
+	Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error)
 }
 
-func Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
-	//if len(args) !=
-	//return schema.ErrorShouldDisplayUsage{
-	//		return errors.New("Exactly three arguments expected")
-	//}
-	//}
+// Mirror
+type Mirror struct{}
+
+// New returns new Mirror instance
+func New() MirrorInterface {
+	return &Mirror{}
+}
+
+// Run - method to actaull copy images from source to destination
+func (o *Mirror) Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
+	return run(ctx, src, dest, opts, stdout)
+}
+
+// run - actual copy images setup and execute
+func run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
+
 	opts.DeprecatedTLSVerify.WarnIfUsed([]string{"--src-tls-verify", "--dest-tls-verify"})
-	//	imageNames := args
 
 	opts.RemoveSignatures, _ = strconv.ParseBool("true")
 
@@ -175,7 +170,10 @@ func Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Wri
 			return err
 		}
 		passphrase = p
-	} // opts.signByFingerprint triggers a GPG-agent passphrase prompt, possibly using a more secure channel, so we usually shouldn’t prompt ourselves if no passphrase was explicitly provided.
+	}
+
+	// opts.signByFingerprint triggers a GPG-agent passphrase prompt, possibly using a more secure channel,
+	// so we usually shouldn’t prompt ourselves if no passphrase was explicitly provided.
 
 	var signIdentity reference.Named = nil
 	if opts.SignIdentity != "" {
@@ -217,4 +215,24 @@ func Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Wri
 		}
 		return nil
 	}, opts.RetryOpts)
+}
+
+// parseMultiArch
+func parseMultiArch(multiArch string) (copy.ImageListSelection, error) {
+	switch multiArch {
+	case "system":
+		return copy.CopySystemImage, nil
+	case "all":
+		return copy.CopyAllImages, nil
+	// There is no CopyNoImages value in copy.ImageListSelection, but because we
+	// don't provide an option to select a set of images to copy, we can use
+	// CopySpecificImages.
+	case "index-only":
+		return copy.CopySpecificImages, nil
+	// We don't expose CopySpecificImages other than index-only above, because
+	// we currently don't provide an option to choose the images to copy. That
+	// could be added in the future.
+	default:
+		return copy.CopySystemImage, fmt.Errorf("unknown multi-arch option %q. Choose one of the supported options: 'system', 'all', or 'index-only'", multiArch)
+	}
 }

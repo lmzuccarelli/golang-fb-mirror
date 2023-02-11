@@ -21,7 +21,7 @@ verify:
 
 test:
 	mkdir -p tests/results
-	go test -v -coverprofile=tests/results/cover.out -tags fake ./...
+	go test -v -coverprofile=tests/results/cover.out ./...
 
 cover:
 	go tool cover -html=tests/results/cover.out -o tests/results/cover.html

@@ -1,4 +1,4 @@
-package services
+package operator
 
 import (
 	"context"
@@ -113,7 +113,7 @@ func TestOperatorImageCollector(t *testing.T) {
 		},
 	}
 
-	executor := &Executor{
+	ex := &Collector{
 		Log:      log,
 		Mirror:   &Mirror{},
 		Config:   cfg,
@@ -138,24 +138,51 @@ func TestOperatorImageCollector(t *testing.T) {
 
 	ctx := context.Background()
 
+	// this test should cover over 80%
 	t.Run("Testing OperatorImageCollector : should pass", func(t *testing.T) {
-		res, err := executor.OperatorImageCollector(ctx)
+		res, err := ex.OperatorImageCollector(ctx)
 		if err != nil {
-			executor.Log.Error(" %v ", err)
+			ex.Log.Error(" %v ", err)
 			t.Fatalf("should not fail")
 		}
-		executor.Log.Info("test %s ", olm)
-		executor.Log.Info("relatedImages %s ", res)
+		log.Debug("olm declarative config %v ", olm)
+		log.Debug("completed test related images %v ", res)
 	})
+
+	// TODO: cover negative cases
 }
 
 // setup mocks
+// we need to mock Manifest, Mirror
 
 type Mirror struct{}
-type Manifest struct{}
+type Manifest struct {
+	Log clog.PluggableLoggerInterface
+}
 
 func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, stdout io.Writer) error {
 	return nil
+}
+
+func (o *Manifest) GetOperatorConfig(file string) (*v1alpha3.OperatorConfigSchema, error) {
+	opcl := v1alpha3.OperatorLabels{OperatorsOperatorframeworkIoIndexConfigsV1: "/configs"}
+	opc := v1alpha3.OperatorConfig{Labels: opcl}
+	ocs := &v1alpha3.OperatorConfigSchema{Config: opc}
+	return ocs, nil
+}
+
+func (o *Manifest) GetRelatedImagesFromCatalogByFilter(filePath, label string, op v1alpha2.Operator, mp map[string]v1alpha3.ISCPackage) (map[string][]v1alpha3.RelatedImage, error) {
+	return nil, nil
+}
+
+func (o *Manifest) GetReleaseSchema(filePath string) ([]v1alpha3.RelatedImage, error) {
+	relatedImages := []v1alpha3.RelatedImage{
+		{Name: "testA", Image: "sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+		{Name: "testB", Image: "sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+		{Name: "testC", Image: "sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+		{Name: "testD", Image: "sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+	}
+	return relatedImages, nil
 }
 
 func (o *Manifest) GetImageIndex(name string) (*v1alpha3.OCISchema, error) {
@@ -189,22 +216,13 @@ func (o *Manifest) GetImageManifest(name string) (*v1alpha3.OCISchema, error) {
 	}, nil
 }
 
-func (o *Manifest) GetOperatorConfig(file string) (*v1alpha3.OperatorConfigSchema, error) {
-	return &v1alpha3.OperatorConfigSchema{
-		Config: v1alpha3.OperatorConfig{
-			Labels: v1alpha3.OperatorLabels{
-				OperatorsOperatorframeworkIoIndexConfigsV1: "/configs",
-			},
-		},
-	}, nil
-}
-
 func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[string][]v1alpha3.RelatedImage, error) {
-	return nil, nil
-}
-
-func (o *Manifest) GetRelatedImagesFromCatalogByFilter(filePath, label string, op v1alpha2.Operator, mp map[string]v1alpha3.ISCPackage) (map[string][]v1alpha3.RelatedImage, error) {
-	return nil, nil
+	relatedImages := make(map[string][]v1alpha3.RelatedImage)
+	relatedImages["abc"] = []v1alpha3.RelatedImage{
+		{Name: "testA", Image: "sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+		{Name: "testB", Image: "sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+	}
+	return relatedImages, nil
 }
 
 func (o *Manifest) ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISchema) error {

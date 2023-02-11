@@ -67,19 +67,15 @@
 				
 				<option value="file5">github.com/lmzuccarelli/golang-oci-mirror/pkg/config/validate.go (95.0%)</option>
 				
-				<option value="file6">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/batch.go (0.0%)</option>
+				<option value="file6">github.com/lmzuccarelli/golang-oci-mirror/pkg/operator/collector.go (85.5%)</option>
 				
-				<option value="file7">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/channels.go (0.0%)</option>
+				<option value="file7">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/cincinnati.go (0.0%)</option>
 				
-				<option value="file8">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/collector.go (79.7%)</option>
+				<option value="file8">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/collector.go (95.7%)</option>
 				
-				<option value="file9">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/executor.go (0.0%)</option>
+				<option value="file9">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/executor.go (89.8%)</option>
 				
-				<option value="file10">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/operators.go (0.0%)</option>
-				
-				<option value="file11">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/options.go (0.0%)</option>
-				
-				<option value="file12">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/release.go (0.0%)</option>
+				<option value="file10">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/options.go (24.0%)</option>
 				
 				</select>
 			</div>
@@ -1015,161 +1011,237 @@ func validateReleaseChannels(cfg *v1alpha2.ImageSetConfiguration) error <span cl
 }
 </pre>
 		
-		<pre class="file" id="file6" style="display: none">package services
+		<pre class="file" id="file6" style="display: none">package operator
 
 import (
         "bufio"
         "context"
         "fmt"
-        "io"
         "os"
         "strings"
-        "sync"
 
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
+        clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 )
 
-type BatchSchema struct {
-        Writer     io.Writer
-        copyImages []v1alpha3.RelatedImage
-        items      int
-        count      int
-        batchSize  int
-        batchIndex int
-        remainder  int
+const (
+        catalogJson string = "catalog.json"
+        // TODO: make this global
+        operatorImageExtractDir     string = "hold-operator"
+        workingDir                  string = "working-dir/"
+        dockerProtocol              string = "docker://"
+        ociProtocol                 string = "oci:"
+        releaseImageDir             string = "release-images"
+        operatorImageDir            string = "operator-images"
+        releaseImageExtractDir      string = "hold-release"
+        releaseManifests            string = "release-manifests"
+        imageReferences             string = "image-references"
+        releaseImageExtractFullPath string = releaseImageExtractDir + "/" + releaseManifests + "/" + imageReferences
+        blobsDir                    string = "/blobs/sha256/"
+        BATCH_SIZE                  int    = 8
+        diskToMirror                string = "diskToMirror"
+        mirrorToDisk                string = "mirrorToDisk"
+)
+
+type CollectorInterface interface {
+        OperatorImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error)
 }
 
-func (o *Executor) BatchWorker(ctx context.Context, workload *BatchSchema, opts mirror.CopyOptions) error <span class="cov0" title="0">{
+func New(log clog.PluggableLoggerInterface,
+        config v1alpha2.ImageSetConfiguration,
+        opts mirror.CopyOptions,
+        mirror mirror.MirrorInterface,
+        manifest manifest.ManifestInterface,
+) CollectorInterface <span class="cov0" title="0">{
+        return &amp;Collector{Log: log, Config: config, Opts: opts, Mirror: mirror, Manifest: manifest}
+}</span>
 
-        var errArray []error
-        var wg sync.WaitGroup
+type Collector struct {
+        Log      clog.PluggableLoggerInterface
+        Mirror   mirror.MirrorInterface
+        Manifest manifest.ManifestInterface
+        Config   v1alpha2.ImageSetConfiguration
+        Opts     mirror.CopyOptions
+}
 
-        writer := bufio.NewWriter(os.Stdout)
-        o.Log.Info("images to mirror %d", workload.items)
-        o.Log.Info("batch count %d", workload.count)
-        o.Log.Info("batch index %d", workload.batchIndex)
-        o.Log.Info("batch size %d", workload.batchSize)
-        o.Log.Info("remainder size %d", workload.remainder)
+// OperatorImageCollector - this looks into the operator index image
+// taking into account the mode we are in (mirrorToDisk, diskToMirror)
+// the image is downloaded (oci format) and the index.json is inspected
+// once unmarshalled, the links to manifests are inspected
+func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error) <span class="cov8" title="1">{
 
-        wg.Add(workload.batchSize)
-        for i := 0; i &lt; workload.count; i++ </span><span class="cov0" title="0">{
-                o.Log.Info(fmt.Sprintf("starting batch %d ", i))
-                for x := 0; x &lt; workload.batchSize; x++ </span><span class="cov0" title="0">{
-                        index := (i * workload.batchSize) + x
-                        irs, err := customImageParser(workload.copyImages[index].Image)
-                        if err != nil </span><span class="cov0" title="0">{
-                                o.Log.Error("%v", err)
-                                continue</span>
-                        }
-                        // ignore the failure as it will be picked up in the Run
-                        <span class="cov0" title="0">err = os.MkdirAll(strings.Split(opts.Destination, ":")[1]+"/"+irs.Namespace, 0750)
-                        if err != nil </span><span class="cov0" title="0">{
-                                return err
+        var allRelatedImages []v1alpha3.RelatedImage
+        compare := make(map[string]v1alpha3.ISCPackage)
+        relatedImages := make(map[string][]v1alpha3.RelatedImage)
+        var err error
+        label := "configs"
+
+        // compile a map to compare channels,min &amp; max versions
+        for _, ops := range o.Config.Mirror.Operators </span><span class="cov8" title="1">{
+                o.Log.Info("isc operators: %s\n", ops.Catalog)
+                for _, pkg := range ops.Packages </span><span class="cov8" title="1">{
+                        o.Log.Info("catalog packages: %s \n", pkg.Name)
+                        for _, channel := range pkg.Channels </span><span class="cov8" title="1">{
+                                compare[pkg.Name] = v1alpha3.ISCPackage{Channel: channel.Name, MinVersion: channel.MinVersion, MaxVersion: channel.MaxVersion}
+                                o.Log.Info("channels: %v \n", compare)
                         }</span>
-                        <span class="cov0" title="0">src := dockerProtocol + workload.copyImages[index].Image
-                        dest := opts.Destination + "/" + irs.Namespace + "/" + irs.Component
-
-                        o.Log.Debug("source %s ", workload.copyImages[index].Image)
-                        o.Log.Debug("destination %s ", opts.Destination+"/"+irs.Namespace+"/"+irs.Component)
-
-                        go func(ctx context.Context, src, dest string, opts *mirror.CopyOptions, writer io.Writer) </span><span class="cov0" title="0">{
-                                defer wg.Done()
-                                err := o.Mirror.Run(ctx, src, dest, opts, writer)
-                                if err != nil </span><span class="cov0" title="0">{
-                                        errArray = append(errArray, err)
-                                }</span>
-                        }(ctx, src, dest, &amp;opts, writer)
-                }
-                <span class="cov0" title="0">wg.Wait()
-                writer.Flush()
-                o.Log.Info("completed batch %d", i)
-                if workload.count &gt; 1 </span><span class="cov0" title="0">{
-                        wg.Add(BATCH_SIZE)
-                }</span>
-                <span class="cov0" title="0">if len(errArray) &gt; 0 </span><span class="cov0" title="0">{
-                        for _, err := range errArray </span><span class="cov0" title="0">{
-                                o.Log.Error(" errArray %v", err)
-                        }</span>
-                        <span class="cov0" title="0">return fmt.Errorf("error in batch - refer to console logs")</span>
                 }
         }
-        <span class="cov0" title="0">return nil</span>
+
+        // check the mode
+        <span class="cov8" title="1">if o.Opts.Mode == mirrorToDisk </span><span class="cov8" title="1">{
+                writer := bufio.NewWriter(os.Stdout)
+                for _, op := range o.Config.Mirror.Operators </span><span class="cov8" title="1">{
+
+                        if !o.Opts.Dev </span><span class="cov8" title="1">{
+                                // download the operator index image
+                                o.Log.Info("copying operator image %v", op.Catalog)
+                                src := dockerProtocol + op.Catalog
+                                dest := ociProtocol + workingDir + operatorImageDir
+                                err := o.Mirror.Run(ctx, src, dest, &amp;o.Opts, writer)
+                                writer.Flush()
+                                if err != nil </span><span class="cov0" title="0">{
+                                        o.Log.Error(" %v ", err)
+                                }</span>
+                                // it's in oci format so we can go directly to the index.json file
+                                <span class="cov8" title="1">oci, err := o.Manifest.GetImageIndex(workingDir + operatorImageDir)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return []v1alpha3.RelatedImage{}, err
+                                }</span>
+
+                                //read the link to the manifest
+                                <span class="cov8" title="1">if len(oci.Manifests) == 0 </span><span class="cov0" title="0">{
+                                        return []v1alpha3.RelatedImage{}, fmt.Errorf("no manifests found for %s ", op.Catalog)
+                                }</span> else<span class="cov8" title="1"> {
+                                        if !strings.Contains(oci.Manifests[0].Digest, "sha256") </span><span class="cov0" title="0">{
+                                                return []v1alpha3.RelatedImage{}, fmt.Errorf("the disgets seems to incorrect for %s ", op.Catalog)
+                                        }</span>
+                                }
+                                <span class="cov8" title="1">manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
+                                o.Log.Info("manifest %v", manifest)
+
+                                // read the operator image manifest
+                                oci, err = o.Manifest.GetImageManifest(workingDir + operatorImageDir + blobsDir + manifest)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return []v1alpha3.RelatedImage{}, err
+                                }</span>
+
+                                // read the config digest to get the detailed manifest
+                                // looking for the lable to search for a specific folder
+                                <span class="cov8" title="1">ocs, err := o.Manifest.GetOperatorConfig(workingDir + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return []v1alpha3.RelatedImage{}, err
+                                }</span>
+
+                                <span class="cov8" title="1">label = ocs.Config.Labels.OperatorsOperatorframeworkIoIndexConfigsV1
+
+                                o.Log.Info("label %s", label)
+
+                                // untar all the blobs for the operator
+                                // if the layer with "label (from previous step) is found to a specific folder"
+                                err = o.Manifest.ExtractLayersOCI(workingDir+operatorImageDir+blobsDir, label, oci)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return []v1alpha3.RelatedImage{}, err
+                                }</span>
+                        }
+
+                        // select all packages
+                        // this is the equivalent of the headOnly mode
+                        // only the latest version of each operator will be selected
+                        <span class="cov8" title="1">if len(op.Packages) == 0 </span><span class="cov8" title="1">{
+                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(operatorImageExtractDir, label)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return []v1alpha3.RelatedImage{}, err
+                                }</span>
+                        } else<span class="cov8" title="1"> {
+                                // iterate through each package
+                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(operatorImageExtractDir, label, op, compare)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return []v1alpha3.RelatedImage{}, err
+                                }</span>
+                        }
+                }
+        }
+
+        <span class="cov8" title="1">o.Log.Info("related images length %d ", len(relatedImages))
+        var count = 0
+        for _, v := range relatedImages </span><span class="cov8" title="1">{
+                count = count + len(v)
+        }</span>
+        <span class="cov8" title="1">o.Log.Info("images to copy (before duplicates) %d ", count)
+
+        // remove all duplicates
+        imgs := cleanDuplicates(relatedImages)
+        o.Log.Trace("flatenned %v ", imgs)
+        o.Log.Debug("images to copy")
+        for k, v := range imgs </span><span class="cov8" title="1">{
+                o.Log.Debug("  name %s", v)
+                o.Log.Debug("  image %s", k)
+                allRelatedImages = append(allRelatedImages, v1alpha3.RelatedImage{Name: v, Image: k})
+        }</span>
+        <span class="cov8" title="1">return allRelatedImages, nil</span>
 }
 
-func customImageParser(image string) (*v1alpha3.ImageRefSchema, error) <span class="cov0" title="0">{
-        var irs *v1alpha3.ImageRefSchema
-        var component string
-        parts := strings.Split(image, "/")
-        if len(parts) &lt; 3 </span><span class="cov0" title="0">{
-                return irs, fmt.Errorf("image url seems to be wrong %s ", image)
-        }</span>
-        <span class="cov0" title="0">if strings.Contains(parts[2], "@") </span><span class="cov0" title="0">{
-                component = strings.Split(parts[2], "@")[0]
-        }</span> else<span class="cov0" title="0"> {
-                component = parts[2]
-        }</span>
-        <span class="cov0" title="0">irs = &amp;v1alpha3.ImageRefSchema{Repository: parts[0], Namespace: parts[1], Component: component}
-        return irs, nil</span>
+// cleanDuplicates - simple utility to remove duplicates
+func cleanDuplicates(m map[string][]v1alpha3.RelatedImage) map[string]string <span class="cov8" title="1">{
+        x := make(map[string]string)
+        for _, v := range m </span><span class="cov8" title="1">{
+                for _, ri := range v </span><span class="cov8" title="1">{
+                        x[ri.Image] = ri.Name
+                }</span>
+        }
+        <span class="cov8" title="1">return x</span>
 }
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">package services
+		<pre class="file" id="file7" style="display: none">package release
 
 import (
         "context"
         "fmt"
 
         "github.com/blang/semver/v4"
-        "github.com/google/uuid"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/cincinnati"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 )
 
-// ReleaseOptions configures either a Full or Diff mirror operation
-// on a particular release image.
-type ReleaseOptions struct {
-        *MirrorOptions
-        // insecure indicates whether the source
-        // registry is insecure
-        insecure bool
-        uuid     uuid.UUID
+type CincinnatiInterface interface {
+        GetReleaseReferenceImages(ctx context.Context) map[string]struct{}
 }
 
-// NewReleaseOptions defaults ReleaseOptions.
-func NewReleaseOptions(mo *MirrorOptions) *ReleaseOptions <span class="cov0" title="0">{
-        relOpts := &amp;ReleaseOptions{
-                MirrorOptions: mo,
-                uuid:          uuid.New(),
-        }
-        if mo.SourcePlainHTTP || mo.SourceSkipTLS </span><span class="cov0" title="0">{
-                relOpts.insecure = true
-        }</span>
-        <span class="cov0" title="0">return relOpts</span>
+func NewCincinnati(config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions) CincinnatiInterface <span class="cov0" title="0">{
+        return &amp;CincinnatiSchema{Config: config, Opts: opts}
+}</span>
+
+type CincinnatiSchema struct {
+        Config *v1alpha2.ImageSetConfiguration
+        Opts   *mirror.CopyOptions
 }
 
-func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfiguration) map[string]struct{} <span class="cov0" title="0">{
+func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[string]struct{} <span class="cov0" title="0">{
 
         var (
-                //srcDir           = filepath.Join(o.Dir, config.SourceDir)
                 releaseDownloads = downloads{}
-                //mmapping         = image.TypedImageMapping{}
-                errs = []error{}
+                errs             = []error{}
         )
 
-        for _, arch := range cfg.Mirror.Platform.Architectures </span><span class="cov0" title="0">{
+        for _, arch := range o.Config.Mirror.Platform.Architectures </span><span class="cov0" title="0">{
 
-                versionsByChannel := make(map[string]v1alpha2.ReleaseChannel, len(cfg.Mirror.Platform.Channels))
+                versionsByChannel := make(map[string]v1alpha2.ReleaseChannel, len(o.Config.Mirror.Platform.Channels))
 
-                for _, ch := range cfg.Mirror.Platform.Channels </span><span class="cov0" title="0">{
+                for _, ch := range o.Config.Mirror.Platform.Channels </span><span class="cov0" title="0">{
 
                         var client cincinnati.Client
                         var err error
                         switch ch.Type </span>{
                         case v1alpha2.TypeOCP:<span class="cov0" title="0">
-                                client, err = cincinnati.NewOCPClient(o.uuid)</span>
+                                client, err = cincinnati.NewOCPClient(o.Opts.UUID)</span>
                         case v1alpha2.TypeOKD:<span class="cov0" title="0">
-                                client, err = cincinnati.NewOKDClient(o.uuid)</span>
+                                client, err = cincinnati.NewOKDClient(o.Opts.UUID)</span>
                         default:<span class="cov0" title="0">
                                 errs = append(errs, fmt.Errorf("invalid platform type %v", ch.Type))
                                 continue</span>
@@ -1223,7 +1295,7 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
                                 versionsByChannel[ch.Name] = ch
                         }</span>
 
-                        <span class="cov0" title="0">downloads, err := o.getChannelDownloads(ctx, client, nil, ch, arch)
+                        <span class="cov0" title="0">downloads, err := getChannelDownloads(ctx, client, nil, ch, arch)
                         if err != nil </span><span class="cov0" title="0">{
                                 errs = append(errs, err)
                                 continue</span>
@@ -1234,20 +1306,20 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
 
                 // Update cfg release channels with maximum and minimum versions
                 // if applicable
-                <span class="cov0" title="0">for i, ch := range cfg.Mirror.Platform.Channels </span><span class="cov0" title="0">{
+                <span class="cov0" title="0">for i, ch := range o.Config.Mirror.Platform.Channels </span><span class="cov0" title="0">{
                         ch, found := versionsByChannel[ch.Name]
                         if found </span><span class="cov0" title="0">{
-                                cfg.Mirror.Platform.Channels[i] = ch
+                                o.Config.Mirror.Platform.Channels[i] = ch
                         }</span>
                 }
 
-                <span class="cov0" title="0">if len(cfg.Mirror.Platform.Channels) &gt; 1 </span><span class="cov0" title="0">{
-                        client, err := cincinnati.NewOCPClient(o.uuid)
+                <span class="cov0" title="0">if len(o.Config.Mirror.Platform.Channels) &gt; 1 </span><span class="cov0" title="0">{
+                        client, err := cincinnati.NewOCPClient(o.Opts.UUID)
                         if err != nil </span><span class="cov0" title="0">{
                                 errs = append(errs, err)
                                 continue</span>
                         }
-                        <span class="cov0" title="0">newDownloads, err := o.getCrossChannelDownloads(ctx, client, arch, cfg.Mirror.Platform.Channels)
+                        <span class="cov0" title="0">newDownloads, err := getCrossChannelDownloads(ctx, client, arch, o.Config.Mirror.Platform.Channels)
                         if err != nil </span><span class="cov0" title="0">{
                                 errs = append(errs, fmt.Errorf("error calculating cross channel upgrades: %v", err))
                                 continue</span>
@@ -1255,7 +1327,6 @@ func (o *ReleaseOptions) Run(ctx context.Context, cfg *v1alpha2.ImageSetConfigur
                         <span class="cov0" title="0">releaseDownloads.Merge(newDownloads)</span>
                 }
         }
-
         <span class="cov0" title="0">return releaseDownloads</span>
 }
 
@@ -1275,7 +1346,7 @@ func (d downloads) Merge(in downloads) <span class="cov0" title="0">{
 var b []byte
 
 // getDownloads will prepare the downloads map for mirroring
-func (o *ReleaseOptions) getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) <span class="cov0" title="0">{
+func getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) <span class="cov0" title="0">{
         allDownloads := downloads{}
 
         var prevChannel v1alpha2.ReleaseChannel
@@ -1362,7 +1433,7 @@ func (o *ReleaseOptions) getChannelDownloads(ctx context.Context, c cincinnati.C
 }
 
 // getCrossChannelDownloads will determine required downloads between channel versions (for OCP only)
-func (o *ReleaseOptions) getCrossChannelDownloads(ctx context.Context, ocpClient cincinnati.Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) <span class="cov0" title="0">{
+func getCrossChannelDownloads(ctx context.Context, ocpClient cincinnati.Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) <span class="cov0" title="0">{
         // Strip any OKD channels from the list
 
         var ocpChannels []v1alpha2.ReleaseChannel
@@ -1410,7 +1481,7 @@ func gatherUpdates(current, newest cincinnati.Update, updates []cincinnati.Updat
 }
 </pre>
 		
-		<pre class="file" id="file8" style="display: none">package services
+		<pre class="file" id="file8" style="display: none">package release
 
 import (
         "bufio"
@@ -1418,131 +1489,96 @@ import (
         "os"
         "strings"
 
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
+        clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 )
 
 const (
         catalogJson string = "catalog.json"
         // TODO: make this global
-        operatorImageExtractDir string = "hold-operator"
+        operatorImageExtractDir     string = "hold-operator"
+        workingDir                  string = "working-dir/"
+        dockerProtocol              string = "docker://"
+        ociProtocol                 string = "oci:"
+        releaseImageDir             string = "release-images"
+        operatorImageDir            string = "operator-images"
+        releaseImageExtractDir      string = "hold-release"
+        releaseManifests            string = "release-manifests"
+        imageReferences             string = "image-references"
+        releaseImageExtractFullPath string = releaseImageExtractDir + "/" + releaseManifests + "/" + imageReferences
+        blobsDir                    string = "/blobs/sha256/"
+        BATCH_SIZE                  int    = 8
+        diskToMirror                string = "diskToMirror"
+        mirrorToDisk                string = "mirrorToDisk"
 )
 
-func (o *Executor) OperatorImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error) <span class="cov8" title="1">{
-
-        var allRelatedImages []v1alpha3.RelatedImage
-        compare := make(map[string]v1alpha3.ISCPackage)
-        relatedImages := make(map[string][]v1alpha3.RelatedImage)
-        var err error
-        label := "configs"
-
-        // compile a map to compare channels,min &amp; max versions
-        for _, ops := range o.Config.Mirror.Operators </span><span class="cov8" title="1">{
-                o.Log.Info("isc operators: %s\n", ops.Catalog)
-                for _, pkg := range ops.Packages </span><span class="cov8" title="1">{
-                        o.Log.Info("catalog packages: %s \n", pkg.Name)
-                        for _, channel := range pkg.Channels </span><span class="cov8" title="1">{
-                                compare[pkg.Name] = v1alpha3.ISCPackage{Channel: channel.Name, MinVersion: channel.MinVersion, MaxVersion: channel.MaxVersion}
-                                o.Log.Info("channels: %v \n", compare)
-                        }</span>
-                }
-        }
-
-        // check the mode
-        <span class="cov8" title="1">if o.Opts.Mode == mirrorToDisk </span><span class="cov8" title="1">{
-                writer := bufio.NewWriter(os.Stdout)
-                for _, op := range o.Config.Mirror.Operators </span><span class="cov8" title="1">{
-
-                        if !o.Opts.Dev </span><span class="cov8" title="1">{
-                                // download the operator index image
-                                o.Log.Info("copying operator image %v", op.Catalog)
-                                src := dockerProtocol + op.Catalog
-                                dest := ociProtocol + workingDir + operatorImageDir
-                                err := o.Mirror.Run(ctx, src, dest, &amp;o.Opts, writer)
-                                writer.Flush()
-                                if err != nil </span><span class="cov0" title="0">{
-                                        o.Log.Error(" %v ", err)
-                                }</span>
-                                // it's in oci format so we can go directly to the index.json file
-                                <span class="cov8" title="1">oci, err := o.Manifest.GetImageIndex(workingDir + operatorImageDir)
-                                if err != nil </span><span class="cov0" title="0">{
-                                        return []v1alpha3.RelatedImage{}, err
-                                }</span>
-
-                                //read the link to the manifest
-                                <span class="cov8" title="1">manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
-                                o.Log.Info("manifest %v", manifest)
-
-                                // read the operator image manifest
-                                oci, err = o.Manifest.GetImageManifest(workingDir + operatorImageDir + blobsDir + manifest)
-                                if err != nil </span><span class="cov0" title="0">{
-                                        return []v1alpha3.RelatedImage{}, err
-                                }</span>
-
-                                // read the config digest to get the detailed manifest
-                                // looking for the lable to search for a specific folder
-                                <span class="cov8" title="1">ocs, err := o.Manifest.GetOperatorConfig(workingDir + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
-                                if err != nil </span><span class="cov0" title="0">{
-                                        return []v1alpha3.RelatedImage{}, err
-                                }</span>
-
-                                <span class="cov8" title="1">label = ocs.Config.Labels.OperatorsOperatorframeworkIoIndexConfigsV1
-
-                                o.Log.Info("label %s", label)
-
-                                // untar all the blobs for the operator
-                                // if the layer with "label (from previous step) is found to a specific folder"
-                                err = o.Manifest.ExtractLayersOCI(workingDir+operatorImageDir+blobsDir, label, oci)
-                                if err != nil </span><span class="cov0" title="0">{
-                                        return []v1alpha3.RelatedImage{}, err
-                                }</span>
-                        }
-
-                        // select all packages
-                        // this is the equivalent of the headOnly mode
-                        // only the latest version of each operator will be selected
-                        <span class="cov8" title="1">if len(op.Packages) == 0 </span><span class="cov8" title="1">{
-                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(operatorImageExtractDir, label)
-                                if err != nil </span><span class="cov0" title="0">{
-                                        return []v1alpha3.RelatedImage{}, err
-                                }</span>
-                        } else<span class="cov8" title="1"> {
-                                // iterate through each package
-                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(operatorImageExtractDir, label, op, compare)
-                                if err != nil </span><span class="cov0" title="0">{
-                                        return []v1alpha3.RelatedImage{}, err
-                                }</span>
-                        }
-                }
-        }
-
-        <span class="cov8" title="1">o.Log.Info("related images length %d ", len(relatedImages))
-        var count = 0
-        for _, v := range relatedImages </span><span class="cov0" title="0">{
-                count = count + len(v)
-        }</span>
-        <span class="cov8" title="1">o.Log.Info("images to copy (before duplicates) %d ", count)
-
-        // remove all duplicates
-        imgs := cleanDuplicates(relatedImages)
-        o.Log.Trace("flatenned %v ", imgs)
-        o.Log.Debug("images to copy")
-        for k, v := range imgs </span><span class="cov0" title="0">{
-                o.Log.Debug("  name %s", v)
-                o.Log.Debug("  image %s", k)
-                allRelatedImages = append(allRelatedImages, v1alpha3.RelatedImage{Name: v, Image: k})
-        }</span>
-        <span class="cov8" title="1">return allRelatedImages, nil</span>
+type CollectorInterface interface {
+        ReleaseImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error)
 }
 
-// cleanDuplicates - simple utility to remove duplicates
-func cleanDuplicates(m map[string][]v1alpha3.RelatedImage) map[string]string <span class="cov8" title="1">{
-        x := make(map[string]string)
-        for _, v := range m </span><span class="cov0" title="0">{
-                for _, ri := range v </span><span class="cov0" title="0">{
-                        x[ri.Image] = ri.Name
+func New(log clog.PluggableLoggerInterface,
+        config v1alpha2.ImageSetConfiguration,
+        opts mirror.CopyOptions,
+        mirror mirror.MirrorInterface,
+        manifest manifest.ManifestInterface,
+        cincinnati CincinnatiInterface,
+) CollectorInterface <span class="cov0" title="0">{
+        return &amp;Collector{Log: log, Config: config, Opts: opts, Mirror: mirror, Manifest: manifest, Cincinnati: cincinnati}
+}</span>
+
+type Collector struct {
+        Log        clog.PluggableLoggerInterface
+        Mirror     mirror.MirrorInterface
+        Manifest   manifest.ManifestInterface
+        Config     v1alpha2.ImageSetConfiguration
+        Opts       mirror.CopyOptions
+        Cincinnati CincinnatiInterface
+}
+
+// ReleaseImageCollector - this looks into the operator index image
+// taking into account the mode we are in (mirrorToDisk, diskToMirror)
+// the image is downloaded (oci format) and the index.json is inspected
+// once unmarshalled, the links to manifests are inspected
+func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error) <span class="cov8" title="1">{
+        writer := bufio.NewWriter(os.Stdout)
+        releases := o.Cincinnati.GetReleaseReferenceImages(ctx)
+
+        for key := range releases </span><span class="cov8" title="1">{
+                //args := []string{dockerProtocol + key, ociProtocol + workingDir + releaseImageDir, "true"}
+                o.Log.Info("copying image %s ", key)
+                src := dockerProtocol + key
+                dest := ociProtocol + workingDir + releaseImageDir
+                err := o.Mirror.Run(ctx, src, dest, &amp;o.Opts, writer)
+                if err != nil </span><span class="cov8" title="1">{
+                        return []v1alpha3.RelatedImage{}, err
                 }</span>
         }
-        <span class="cov8" title="1">return x</span>
+
+        <span class="cov8" title="1">oci, err := o.Manifest.GetImageIndex(workingDir + releaseImageDir)
+        if err != nil </span><span class="cov8" title="1">{
+                o.Log.Error(" %v ", err)
+                return []v1alpha3.RelatedImage{}, err
+        }</span>
+
+        //read the link to the manifest
+        <span class="cov8" title="1">manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
+        o.Log.Info("manifest %v", manifest)
+
+        oci, err = o.Manifest.GetImageManifest(workingDir + releaseImageDir + blobsDir + manifest)
+        if err != nil </span><span class="cov8" title="1">{
+                return []v1alpha3.RelatedImage{}, err
+        }</span>
+
+        <span class="cov8" title="1">err = o.Manifest.ExtractLayersOCI(releaseImageExtractDir, releaseManifests, oci)
+        if err != nil </span><span class="cov8" title="1">{
+                return []v1alpha3.RelatedImage{}, err
+        }</span>
+
+        <span class="cov8" title="1">return o.Manifest.GetReleaseSchema(workingDir + releaseImageExtractFullPath)</span>
+
 }
 </pre>
 		
@@ -1558,12 +1594,23 @@ import (
         "k8s.io/kubectl/pkg/util/templates"
 
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/batch"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
         clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
         "github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
-        "github.com/microlib/simple"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/operator"
+        "github.com/lmzuccarelli/golang-oci-mirror/pkg/release"
         "github.com/spf13/cobra"
+)
+
+const (
+        dockerProtocol  string = "docker://"
+        ociProtocol     string = "oci:"
+        diskToMirror    string = "diskToMirror"
+        mirrorToDisk    string = "mirrorToDisk"
+        releaseImageDir string = "release-images"
 )
 
 var (
@@ -1590,16 +1637,56 @@ var (
         )
 )
 
-type Executor struct {
-        Log      *clog.CustomLogger
-        Mirror   mirror.MirrorInterface
-        Manifest manifest.ManifestInterface
-        Config   v1alpha2.ImageSetConfiguration
-        Opts     mirror.CopyOptions
+type ExecutorSchema struct {
+        Log        clog.PluggableLoggerInterface
+        Config     v1alpha2.ImageSetConfiguration
+        Opts       mirror.CopyOptions
+        Operator   operator.CollectorInterface
+        Release    release.CollectorInterface
+        Mirror     mirror.MirrorInterface
+        Manifest   manifest.ManifestInterface
+        Batch      batch.BatchInterface
+        MirrorOpts MirrorOptions
 }
 
-func NewMirrorCmd() *cobra.Command <span class="cov0" title="0">{
+// NewMirrorCmd - cobra entry point
+func NewMirrorCmd() *cobra.Command <span class="cov8" title="1">{
+
         o := MirrorOptions{}
+
+        global := &amp;mirror.GlobalOptions{
+                Debug:          true,
+                TlsVerify:      false,
+                InsecurePolicy: true,
+        }
+
+        _, sharedOpts := mirror.SharedImageFlags()
+        _, deprecatedTLSVerifyOpt := mirror.DeprecatedTLSVerifyFlags()
+        _, srcOpts := mirror.ImageFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "src-", "screds")
+        _, destOpts := mirror.ImageDestFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "dest-", "dcreds")
+        _, retryOpts := mirror.RetryFlags()
+
+        opts := mirror.CopyOptions{
+                Global:              global,
+                DeprecatedTLSVerify: deprecatedTLSVerifyOpt,
+                SrcImage:            srcOpts,
+                DestImage:           destOpts,
+                RetryOpts:           retryOpts,
+                Dev:                 false,
+        }
+
+        // setup pluggable logger
+        // feel free to plugin you own logger
+        // just use the PluggableLoggerInterface
+        // in the file pkg/log.go
+        log := clog.New("debug")
+
+        ex := &amp;ExecutorSchema{
+                Log:  log,
+                Opts: opts,
+        }
+
+        log.Info("executor schema %v ", ex)
 
         cmd := &amp;cobra.Command{
                 Use: fmt.Sprintf(
@@ -1616,94 +1703,87 @@ func NewMirrorCmd() *cobra.Command <span class="cov0" title="0">{
                 SilenceUsage:  false,
                 Run: func(cmd *cobra.Command, args []string) </span><span class="cov0" title="0">{
                         //kcmdutil.CheckErr(o.Complete(cmd, args))
-                        kcmdutil.CheckErr(o.Validate(args[0]))
-                        kcmdutil.CheckErr(o.Run(cmd, args))
+                        kcmdutil.CheckErr(ex.Validate(args))
+                        kcmdutil.CheckErr(ex.Run(cmd, args))
                 }</span>,
         }
 
-        <span class="cov0" title="0">o.BindFlags(cmd.Flags())
+        <span class="cov8" title="1">o.BindFlags(cmd.Flags())
+        opts.Global.ConfigPath = o.ConfigPath
+
         return cmd</span>
 }
 
-func (o *MirrorOptions) Run(cmd *cobra.Command, args []string) error <span class="cov0" title="0">{
-
-        // setup custom logger
-        // feel free to plugin you own logger -just use the Logger struct
-        // in the file pkg/services/log.go
-        sl := &amp;simple.Logger{Level: "debug"}
-        log := &amp;clog.CustomLogger{Log: sl}
-
-        cfg, err := config.ReadConfig(o.ConfigPath)
-        if err != nil </span><span class="cov0" title="0">{
-                log.Error("imagesetconfig %v ", err)
-        }</span>
-        <span class="cov0" title="0">log.Debug("imagesetconfig : %v", cfg)
-
-        global := &amp;mirror.GlobalOptions{Debug: true, TlsVerify: false, InsecurePolicy: true}
-        _, sharedOpts := mirror.SharedImageFlags()
-        _, deprecatedTLSVerifyOpt := mirror.DeprecatedTLSVerifyFlags()
-        _, srcOpts := mirror.ImageFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "src-", "screds")
-        _, destOpts := mirror.ImageDestFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "dest-", "dcreds")
-        _, retryOpts := mirror.RetryFlags()
-        opts := mirror.CopyOptions{
-                Global:              global,
-                DeprecatedTLSVerify: deprecatedTLSVerifyOpt,
-                SrcImage:            srcOpts,
-                DestImage:           destOpts,
-                RetryOpts:           retryOpts,
-                Destination:         args[0],
-                Dev:                 false,
-        }
+// Run - start the mirror functionality
+func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span class="cov8" title="1">{
 
         // logic to check mode
-        if strings.Contains(args[0], ociProtocol) </span><span class="cov0" title="0">{
-                opts.Mode = mirrorToDisk
-        }</span> else<span class="cov0" title="0"> if strings.Contains(args[0], dockerProtocol) </span><span class="cov0" title="0">{
-                opts.Mode = diskToMirror
+        if strings.Contains(args[0], ociProtocol) </span><span class="cov8" title="1">{
+                o.Opts.Mode = mirrorToDisk
+        }</span> else<span class="cov8" title="1"> if strings.Contains(args[0], dockerProtocol) </span><span class="cov8" title="1">{
+                o.Opts.Mode = diskToMirror
         }</span>
 
-        <span class="cov0" title="0">log.Info("mode %s ", opts.Mode)
+        <span class="cov8" title="1">o.Log.Info("mode %s ", o.Opts.Mode)
 
-        executor := &amp;Executor{
-                Log:      log,
-                Mirror:   mirror.New(),
-                Manifest: manifest.New(log),
-                Config:   cfg,
-                Opts:     opts,
-        }
+        // read the ImageSetConfiguration
+        cfg, err := config.ReadConfig(o.Opts.Global.ConfigPath)
+        if err != nil </span><span class="cov0" title="0">{
+                o.Log.Error("imagesetconfig %v ", err)
+        }</span>
+        <span class="cov8" title="1">o.Log.Debug("imagesetconfig : %v", cfg)
+
+        o.Config = cfg
+        //o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
+        //o.Mirror = mirror.New()
+        //o.Batch = batch.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
 
         // ensure working dir exists
         err = os.MkdirAll("working-dir", 0755)
         if err != nil </span><span class="cov0" title="0">{
-                log.Error(" %v ", err)
-                os.Exit(1)
+                o.Log.Error(" %v ", err)
+                return err
         }</span>
 
+        <span class="cov8" title="1">var allRelatedImages []v1alpha3.RelatedImage
+
         // do releases
-        <span class="cov0" title="0">if len(cfg.Mirror.Platform.Channels) &gt; 10 </span><span class="cov0" title="0">{
-                err = executor.ExecuteRelease(cmd.Context())
-                if err != nil </span><span class="cov0" title="0">{
-                        log.Error(fmt.Sprintf("executing release copy %v ", err))
-                        os.Exit(1)
+        if len(cfg.Mirror.Platform.Channels) &gt; 0 </span><span class="cov8" title="1">{
+                //TODO
+                // add these in the BatchWorker
+                // src := dockerProtocol + release.Spec.Tags[index].From.Name
+                // dest := strings.Split(release.Spec.Tags[index].From.Name, ":")[1]
+                allRelatedImages, err = o.Release.ReleaseImageCollector(cmd.Context())
+                if err != nil </span><span class="cov8" title="1">{
+                        return err
                 }</span>
+                <span class="cov8" title="1">o.Log.Info("total release images to copy %d ", len(allRelatedImages))</span>
+                //call the batch executioner
         }
 
         // do operators
-        <span class="cov0" title="0">if len(cfg.Mirror.Operators) &gt; 0 </span><span class="cov0" title="0">{
-                err = executor.ExecuteOperators(cmd.Context())
-                if err != nil </span><span class="cov0" title="0">{
-                        log.Error(fmt.Sprintf("executing operator copy %v ", err))
-                        os.Exit(1)
+        <span class="cov8" title="1">if len(cfg.Mirror.Operators) &gt; 0 </span><span class="cov8" title="1">{
+                allRelatedImages, err = o.Operator.OperatorImageCollector(cmd.Context())
+                if err != nil </span><span class="cov8" title="1">{
+                        return err
                 }</span>
+                <span class="cov8" title="1">o.Log.Info("total operator images to copy %d ", len(allRelatedImages))</span>
         }
-        <span class="cov0" title="0">return nil</span>
+
+        <span class="cov8" title="1">err = o.Batch.Worker(cmd.Context(), allRelatedImages, o.Opts)
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
 }
 
-func (o *MirrorOptions) Validate(dest string) error <span class="cov0" title="0">{
-        if strings.Contains(dest, "oci:") || strings.Contains(dest, "docker://") </span><span class="cov0" title="0">{
+// Validate - cobra validation
+func (o *ExecutorSchema) Validate(dest []string) error <span class="cov8" title="1">{
+        if strings.Contains(dest[0], "oci:") || strings.Contains(dest[0], "docker://") </span><span class="cov8" title="1">{
                 return nil
         }</span>
-        <span class="cov0" title="0">return fmt.Errorf("destination protocol must be either oci: or docker://")</span>
+        <span class="cov8" title="1">return fmt.Errorf("destination protocol must be either oci: or docker://")</span>
 }
 </pre>
 		
@@ -1711,58 +1791,11 @@ func (o *MirrorOptions) Validate(dest string) error <span class="cov0" title="0"
 
 import (
         "context"
-)
-
-func (o *Executor) ExecuteOperators(ctx context.Context) error <span class="cov0" title="0">{
-
-        allRelatedImages, err := o.OperatorImageCollector(ctx)
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-        <span class="cov0" title="0">o.Log.Info("total images to copy %d ", len(allRelatedImages))
-
-        var batch *BatchSchema
-        images := len(allRelatedImages)
-        if images &lt; BATCH_SIZE </span><span class="cov0" title="0">{
-                batch = &amp;BatchSchema{items: images, count: 1, batchSize: images, batchIndex: 0, remainder: 0}
-        }</span> else<span class="cov0" title="0"> {
-                batch = &amp;BatchSchema{items: images, count: (images / BATCH_SIZE), batchSize: BATCH_SIZE, remainder: (images % BATCH_SIZE)}
-        }</span>
-        <span class="cov0" title="0">batch.copyImages = allRelatedImages
-
-        // call the batch executioner
-        err = o.BatchWorker(ctx, batch, o.Opts)
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-        <span class="cov0" title="0">if batch.remainder &gt; 0 </span><span class="cov0" title="0">{
-                batch.batchIndex = batch.count
-                batch.count = batch.remainder
-                batch.batchSize = 1
-                err := o.BatchWorker(ctx, batch, o.Opts)
-                if err != nil </span><span class="cov0" title="0">{
-                        return err
-                }</span>
-        }
-        <span class="cov0" title="0">return nil</span>
-}
-</pre>
-		
-		<pre class="file" id="file11" style="display: none">package services
-
-import (
-        "context"
-        "flag"
-        "fmt"
-        "io"
-        "io/ioutil"
         "os"
         "os/signal"
         "sync"
         "syscall"
 
-        "github.com/sirupsen/logrus"
-        "github.com/spf13/cobra"
         "github.com/spf13/pflag"
         "k8s.io/cli-runtime/pkg/genericclioptions"
         "k8s.io/klog/v2"
@@ -1780,73 +1813,6 @@ func (o *RootOptions) BindFlags(fs *pflag.FlagSet) <span class="cov0" title="0">
         fs.IntVarP(&amp;o.LogLevel, "verbose", "v", o.LogLevel, "Number for the log level verbosity (valid 1-9, default is 0)")
         if err := fs.MarkHidden("dir"); err != nil </span><span class="cov0" title="0">{
                 klog.Fatal(err.Error())
-        }</span>
-}
-
-func (o *RootOptions) LogfilePreRun(cmd *cobra.Command, _ []string) <span class="cov0" title="0">{
-        var fsv2 flag.FlagSet
-        // Configure klog flags
-        klog.InitFlags(&amp;fsv2)
-        checkErr(fsv2.Set("stderrthreshold", "4"))
-        checkErr(fsv2.Set("skip_headers", "true"))
-        checkErr(fsv2.Set("logtostderr", "false"))
-        checkErr(fsv2.Set("alsologtostderr", "false"))
-        checkErr(fsv2.Set("v", fmt.Sprintf("%d", o.LogLevel)))
-
-        logFile, err := os.OpenFile(".oc-mirror.log", os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
-        if err != nil </span><span class="cov0" title="0">{
-                klog.Fatal(err)
-        }</span>
-
-        <span class="cov0" title="0">klog.SetOutput(io.MultiWriter(o.IOStreams.Out, logFile))
-
-        // Setup logrus for use with operator-registry
-        logrus.SetOutput(ioutil.Discard)
-
-        var logrusLevel logrus.Level
-        switch o.LogLevel </span>{
-        case 0:<span class="cov0" title="0">
-                logrusLevel = logrus.InfoLevel</span>
-        case 1:<span class="cov0" title="0">
-                logrusLevel = logrus.DebugLevel</span>
-        case 2:<span class="cov0" title="0">
-                logrusLevel = logrus.DebugLevel</span>
-        default:<span class="cov0" title="0">
-                logrusLevel = logrus.TraceLevel</span>
-        }
-
-        <span class="cov0" title="0">logrus.SetLevel(logrusLevel)
-        //logrus.AddHook(newFileHookWithNewlineTruncate(o.IOStreams.ErrOut, logrusLevel, &amp;logrus.TextFormatter{
-        //        DisableTimestamp:       false,
-        //                DisableLevelTruncation: true,
-        //                DisableQuote:           true,
-        //        }))
-        //        logrusCleanup := setupFileHook(logFile)
-
-        // Add to root IOStream options
-        o.IOStreams = genericclioptions.IOStreams{
-                In:     o.IOStreams.In,
-                Out:    io.MultiWriter(o.IOStreams.Out, logFile),
-                ErrOut: io.MultiWriter(o.IOStreams.ErrOut, logFile),
-        }
-
-        o.logfileCleanup = func() </span><span class="cov0" title="0">{
-                klog.Flush()
-                //                logrusCleanup()
-                checkErr(logFile.Close())
-        }</span>
-
-}
-
-func (o *RootOptions) LogfilePostRun(*cobra.Command, []string) <span class="cov0" title="0">{
-        if o.logfileCleanup != nil </span><span class="cov0" title="0">{
-                o.logfileCleanup()
-        }</span>
-}
-
-func checkErr(err error) <span class="cov0" title="0">{
-        if err != nil </span><span class="cov0" title="0">{
-                klog.Fatal(err)
         }</span>
 }
 
@@ -1882,7 +1848,7 @@ type MirrorOptions struct {
         //remoteRegFuncs   RemoteRegFuncs
 }
 
-func (o *MirrorOptions) BindFlags(fs *pflag.FlagSet) <span class="cov0" title="0">{
+func (o *MirrorOptions) BindFlags(fs *pflag.FlagSet) <span class="cov8" title="1">{
         fs.StringVarP(&amp;o.ConfigPath, "config", "c", o.ConfigPath, "Path to imageset configuration file")
         fs.StringVarP(&amp;o.loglevel, "loglevel", "l", o.loglevel, "Log level one of (info, debug, trace, error)")
         fs.BoolVar(&amp;o.DryRun, "dry-run", o.DryRun, "Print actions without mirroring images")
@@ -1928,106 +1894,6 @@ func makeCancelCh(signals ...os.Signal) &lt;-chan struct{} <span class="cov0" ti
                 }</span>
         }()
         <span class="cov0" title="0">return resultCh</span>
-}
-</pre>
-		
-		<pre class="file" id="file12" style="display: none">package services
-
-import (
-        "bufio"
-        "context"
-        "encoding/json"
-        "os"
-        "strings"
-
-        "github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-)
-
-func (o *Executor) ExecuteRelease(ctx context.Context) error <span class="cov0" title="0">{
-
-        mo := MirrorOptions{}
-        writer := bufio.NewWriter(os.Stdout)
-
-        releaseOpts := NewReleaseOptions(&amp;mo)
-        releases := releaseOpts.Run(ctx, &amp;o.Config)
-
-        for key := range releases </span><span class="cov0" title="0">{
-                //args := []string{dockerProtocol + key, ociProtocol + workingDir + releaseImageDir, "true"}
-                o.Log.Info("copying image %s ", key)
-                src := dockerProtocol + key
-                dest := ociProtocol + workingDir + releaseImageDir
-                err := o.Mirror.Run(ctx, src, dest, &amp;o.Opts, writer)
-                if err != nil </span><span class="cov0" title="0">{
-                        o.Log.Error(" %v ", err)
-                }</span>
-        }
-
-        <span class="cov0" title="0">oci, err := o.Manifest.GetImageIndex(workingDir + releaseImageDir)
-        if err != nil </span><span class="cov0" title="0">{
-                o.Log.Error(" %v ", err)
-                return err
-        }</span>
-
-        //read the link to the manifest
-        <span class="cov0" title="0">manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
-        o.Log.Info("manifest %v", manifest)
-
-        oci, err = o.Manifest.GetImageManifest(workingDir + releaseImageDir + blobsDir + manifest)
-        if err != nil </span><span class="cov0" title="0">{
-                o.Log.Error(" %v ", err)
-                return err
-        }</span>
-
-        <span class="cov0" title="0">err = o.Manifest.ExtractLayersOCI(releaseImageExtractDir, releaseManifests, oci)
-        if err != nil </span><span class="cov0" title="0">{
-                o.Log.Error(" %v ", err)
-        }</span>
-
-        <span class="cov0" title="0">var release = v1alpha3.ReleaseSchema{}
-
-        file, _ := os.ReadFile(workingDir + releaseImageExtractFullPath)
-        err = json.Unmarshal([]byte(file), &amp;release)
-        if err != nil </span><span class="cov0" title="0">{
-                o.Log.Error("Unmarshaling to struct %v", err)
-        }</span>
-
-        <span class="cov0" title="0">var allImages []v1alpha3.RelatedImage
-        for _, item := range release.Spec.Tags </span><span class="cov0" title="0">{
-                o.Log.Info("  %s ", item.Name)
-                allImages = append(allImages, v1alpha3.RelatedImage{Image: item.Name})
-        }</span>
-
-        <span class="cov0" title="0">var batch *BatchSchema
-        images := len(release.Spec.Tags)
-        if images &lt; BATCH_SIZE </span><span class="cov0" title="0">{
-                batch = &amp;BatchSchema{items: images, count: 1, batchSize: images, batchIndex: 0, remainder: 0}
-        }</span> else<span class="cov0" title="0"> {
-                batch = &amp;BatchSchema{items: images, count: (images / BATCH_SIZE), batchSize: BATCH_SIZE, remainder: (images % BATCH_SIZE)}
-        }</span>
-        <span class="cov0" title="0">batch.copyImages = allImages
-        batch.Writer = writer
-
-        //TODO
-        // add these in the BatchWorker
-        // src := dockerProtocol + release.Spec.Tags[index].From.Name
-        //        dest := strings.Split(release.Spec.Tags[index].From.Name, ":")[1]
-
-        //call the batch executioner
-        err = o.BatchWorker(ctx, batch, o.Opts)
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-        <span class="cov0" title="0">if batch.remainder &gt; 0 </span><span class="cov0" title="0">{
-                batch.batchIndex = batch.count
-                batch.count = batch.remainder
-                batch.batchSize = 1
-                err := o.BatchWorker(ctx, batch, o.Opts)
-                if err != nil </span><span class="cov0" title="0">{
-                        return err
-                }</span>
-        }
-        <span class="cov0" title="0">writer.Flush()
-        return nil</span>
 }
 </pre>
 		
