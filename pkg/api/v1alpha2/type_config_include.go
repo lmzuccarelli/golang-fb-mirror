@@ -131,9 +131,11 @@ func (ic *IncludeConfig) Decode(r io.Reader) error {
 	return nil
 }
 
+/*
 func (b IncludeBundle) validate() error {
 	if b.MinVersion != "" && b.MinBundle != "" {
 		return fmt.Errorf("minimum version and bundle are mutually exclusive")
 	}
 	return nil
 }
+*/

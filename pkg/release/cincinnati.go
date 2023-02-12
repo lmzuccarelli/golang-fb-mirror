@@ -5,22 +5,37 @@ import (
 	"fmt"
 
 	"github.com/blang/semver/v4"
+	"github.com/google/uuid"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/cincinnati"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 )
 
 type CincinnatiInterface interface {
 	GetReleaseReferenceImages(ctx context.Context) map[string]struct{}
+	NewOCPClient(uuid uuid.UUID) (Client, error)
+	NewOKDClient(uuid uuid.UUID) (Client, error)
 }
 
-func NewCincinnati(config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions) CincinnatiInterface {
-	return &CincinnatiSchema{Config: config, Opts: opts}
+func NewCincinnati(config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions, c Client, b bool) CincinnatiInterface {
+	return &CincinnatiSchema{Config: config, Opts: opts, Client: c, Fail: b}
 }
 
 type CincinnatiSchema struct {
 	Config *v1alpha2.ImageSetConfiguration
 	Opts   *mirror.CopyOptions
+	Client Client
+	Fail   bool
+}
+
+func (o *CincinnatiSchema) NewOCPClient(uuid uuid.UUID) (Client, error) {
+	if o.Fail {
+		return o.Client, fmt.Errorf("forced cincinnati error")
+	}
+	return o.Client, nil
+}
+
+func (o *CincinnatiSchema) NewOKDClient(uuid uuid.UUID) (Client, error) {
+	return o.Client, nil
 }
 
 func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[string]struct{} {
@@ -36,13 +51,19 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 
 		for _, ch := range o.Config.Mirror.Platform.Channels {
 
-			var client cincinnati.Client
+			var client Client //client := o.Client
 			var err error
 			switch ch.Type {
 			case v1alpha2.TypeOCP:
-				client, err = cincinnati.NewOCPClient(o.Opts.UUID)
+				client, err = o.NewOCPClient(o.Opts.UUID)
+				if err != nil {
+					errs = append(errs, err)
+				}
 			case v1alpha2.TypeOKD:
-				client, err = cincinnati.NewOKDClient(o.Opts.UUID)
+				client, err = o.NewOKDClient(o.Opts.UUID)
+				if err != nil {
+					errs = append(errs, err)
+				}
 			default:
 				errs = append(errs, fmt.Errorf("invalid platform type %v", ch.Type))
 				continue
@@ -56,7 +77,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 
 				// Find channel maximum value and only set the minimum as well if heads-only is true
 				if len(ch.MaxVersion) == 0 {
-					latest, err := cincinnati.GetChannelMinOrMax(ctx, client, arch, ch.Name, false)
+					latest, err := GetChannelMinOrMax(ctx, client, arch, ch.Name, false)
 					if err != nil {
 						errs = append(errs, err)
 						continue
@@ -79,7 +100,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 				// Find channel minimum if full is true or just the minimum is not set
 				// in the config
 				if len(ch.MinVersion) == 0 {
-					first, err := cincinnati.GetChannelMinOrMax(ctx, client, arch, ch.Name, true)
+					first, err := GetChannelMinOrMax(ctx, client, arch, ch.Name, true)
 					if err != nil {
 						errs = append(errs, err)
 						continue
@@ -115,7 +136,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 		}
 
 		if len(o.Config.Mirror.Platform.Channels) > 1 {
-			client, err := cincinnati.NewOCPClient(o.Opts.UUID)
+			client, err := NewOCPClient(o.Opts.UUID)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -127,6 +148,9 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 			}
 			releaseDownloads.Merge(newDownloads)
 		}
+	}
+	for _, e := range errs {
+		fmt.Println("error list ", e)
 	}
 	return releaseDownloads
 }
@@ -144,10 +168,10 @@ func (d downloads) Merge(in downloads) {
 	}
 }
 
-var b []byte
+//var b []byte
 
 // getDownloads will prepare the downloads map for mirroring
-func getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) {
+func getChannelDownloads(ctx context.Context, c Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) {
 	allDownloads := downloads{}
 
 	var prevChannel v1alpha2.ReleaseChannel
@@ -156,45 +180,46 @@ func getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels 
 			prevChannel = ch
 		}
 	}
+	fmt.Println("previous channel ", prevChannel)
+	/*
+		if prevChannel.Name != "" {
+			// If the requested min version is less than the previous, add downloads
+			if prevChannel.MinVersion > channel.MinVersion {
+				first, err := semver.Parse(channel.MinVersion)
+				if err != nil {
+					return allDownloads, err
+				}
+				last, err := semver.Parse(prevChannel.MinVersion)
+				if err != nil {
+					return allDownloads, err
+				}
+				current, newest, updates, err := CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
+				if err != nil {
+					return allDownloads, err
+				}
+				newDownloads := gatherUpdates(current, newest, updates)
+				allDownloads.Merge(newDownloads)
+			}
 
-	if prevChannel.Name != "" {
-		// If the requested min version is less than the previous, add downloads
-		if prevChannel.MinVersion > channel.MinVersion {
-			first, err := semver.Parse(channel.MinVersion)
-			if err != nil {
-				return allDownloads, err
+			// If the requested max version is more than the previous, add downloads
+			if prevChannel.MaxVersion < channel.MaxVersion {
+				first, err := semver.Parse(prevChannel.MaxVersion)
+				if err != nil {
+					return allDownloads, err
+				}
+				last, err := semver.Parse(channel.MinVersion)
+				if err != nil {
+					return allDownloads, err
+				}
+				current, newest, updates, err := CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
+				if err != nil {
+					return allDownloads, err
+				}
+				newDownloads := gatherUpdates(current, newest, updates)
+				allDownloads.Merge(newDownloads)
 			}
-			last, err := semver.Parse(prevChannel.MinVersion)
-			if err != nil {
-				return allDownloads, err
-			}
-			current, newest, updates, err := cincinnati.CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
-			if err != nil {
-				return allDownloads, err
-			}
-			newDownloads := gatherUpdates(current, newest, updates)
-			allDownloads.Merge(newDownloads)
 		}
-
-		// If the requested max version is more than the previous, add downloads
-		if prevChannel.MaxVersion < channel.MaxVersion {
-			first, err := semver.Parse(prevChannel.MaxVersion)
-			if err != nil {
-				return allDownloads, err
-			}
-			last, err := semver.Parse(channel.MinVersion)
-			if err != nil {
-				return allDownloads, err
-			}
-			current, newest, updates, err := cincinnati.CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
-			if err != nil {
-				return allDownloads, err
-			}
-			newDownloads := gatherUpdates(current, newest, updates)
-			allDownloads.Merge(newDownloads)
-		}
-	}
-
+	*/
 	// Plot between min and max of channel
 	first, err := semver.Parse(channel.MinVersion)
 	if err != nil {
@@ -207,7 +232,7 @@ func getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels 
 
 	var newDownloads downloads
 	if channel.ShortestPath {
-		current, newest, updates, err := cincinnati.CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
+		current, newest, updates, err := CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
 		if err != nil {
 			return allDownloads, err
 		}
@@ -222,11 +247,11 @@ func getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels 
 		if err != nil {
 			return allDownloads, err
 		}
-		versions, err := cincinnati.GetUpdatesInRange(ctx, c, channel.Name, arch, highRange.AND(lowRange))
+		versions, err := GetUpdatesInRange(ctx, c, channel.Name, arch, highRange.AND(lowRange))
 		if err != nil {
 			return allDownloads, err
 		}
-		newDownloads = gatherUpdates(cincinnati.Update{}, cincinnati.Update{}, versions)
+		newDownloads = gatherUpdates(Update{}, Update{}, versions)
 	}
 	allDownloads.Merge(newDownloads)
 
@@ -234,7 +259,7 @@ func getChannelDownloads(ctx context.Context, c cincinnati.Client, lastChannels 
 }
 
 // getCrossChannelDownloads will determine required downloads between channel versions (for OCP only)
-func getCrossChannelDownloads(ctx context.Context, ocpClient cincinnati.Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) {
+func getCrossChannelDownloads(ctx context.Context, ocpClient Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) {
 	// Strip any OKD channels from the list
 
 	var ocpChannels []v1alpha2.ReleaseChannel
@@ -248,22 +273,22 @@ func getCrossChannelDownloads(ctx context.Context, ocpClient cincinnati.Client, 
 		return downloads{}, nil
 	}
 
-	firstCh, first, err := cincinnati.FindRelease(ocpChannels, true)
+	firstCh, first, err := FindRelease(ocpChannels, true)
 	if err != nil {
 		return downloads{}, fmt.Errorf("failed to find minimum release version: %v", err)
 	}
-	lastCh, last, err := cincinnati.FindRelease(ocpChannels, false)
+	lastCh, last, err := FindRelease(ocpChannels, false)
 	if err != nil {
 		return downloads{}, fmt.Errorf("failed to find maximum release version: %v", err)
 	}
-	current, newest, updates, err := cincinnati.CalculateUpgrades(ctx, ocpClient, arch, firstCh, lastCh, first, last)
+	current, newest, updates, err := CalculateUpgrades(ctx, ocpClient, arch, firstCh, lastCh, first, last)
 	if err != nil {
 		return downloads{}, fmt.Errorf("failed to get upgrade graph: %v", err)
 	}
 	return gatherUpdates(current, newest, updates), nil
 }
 
-func gatherUpdates(current, newest cincinnati.Update, updates []cincinnati.Update) downloads {
+func gatherUpdates(current, newest Update, updates []Update) downloads {
 	releaseDownloads := downloads{}
 	for _, update := range updates {
 		fmt.Printf("Found update %s\n", update.Version)

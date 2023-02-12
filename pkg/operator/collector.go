@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	catalogJson string = "catalog.json"
-	// TODO: make this global
+	//catalogJson string = "catalog.json"
 	operatorImageExtractDir     string = "hold-operator"
 	workingDir                  string = "working-dir/"
 	dockerProtocol              string = "docker://"
@@ -129,7 +128,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.Rela
 
 				// untar all the blobs for the operator
 				// if the layer with "label (from previous step) is found to a specific folder"
-				err = o.Manifest.ExtractLayersOCI(workingDir+operatorImageDir+blobsDir, label, oci)
+				err = o.Manifest.ExtractLayersOCI(workingDir+operatorImageDir+blobsDir, workingDir+operatorImageExtractDir, label, oci)
 				if err != nil {
 					return []v1alpha3.RelatedImage{}, err
 				}

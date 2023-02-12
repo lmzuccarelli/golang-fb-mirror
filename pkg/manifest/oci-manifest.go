@@ -20,6 +20,7 @@ const (
 	index                   string = "index.json"
 	catalogJson             string = "catalog.json"
 	operatorImageExtractDir string = "hold-operator"
+	errorSemver             string = " semver %v "
 )
 
 type ManifestInterface interface {
@@ -28,8 +29,7 @@ type ManifestInterface interface {
 	GetOperatorConfig(file string) (*v1alpha3.OperatorConfigSchema, error)
 	GetRelatedImagesFromCatalog(filePath, label string) (map[string][]v1alpha3.RelatedImage, error)
 	GetRelatedImagesFromCatalogByFilter(filePath, label string, op v1alpha2.Operator, mp map[string]v1alpha3.ISCPackage) (map[string][]v1alpha3.RelatedImage, error)
-	ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISchema) error
-	ExtractLayers(filePath, name, label string) error
+	ExtractLayersOCI(filePath, toPath, label string, oci *v1alpha3.OCISchema) error
 	GetReleaseSchema(filePath string) ([]v1alpha3.RelatedImage, error)
 }
 
@@ -84,7 +84,7 @@ func (o *Manifest) GetOperatorConfig(file string) (*v1alpha3.OperatorConfigSchem
 	return ocs, nil
 }
 
-// poperatorImageExtractDir + "/" + label
+// operatorImageExtractDir + "/" + label
 // GetRelatedImagesFromCatalog
 func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[string][]v1alpha3.RelatedImage, error) {
 	relatedImages := make(map[string][]v1alpha3.RelatedImage)
@@ -95,7 +95,7 @@ func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[stri
 	for _, file := range files {
 		// the catalog.json - does not really conform to json standards
 		// this needs some thorough testing
-		olm, err := readOperatorCatalog(file.Name())
+		olm, err := readOperatorCatalog(filePath + "/" + file.Name())
 		if err != nil {
 			return relatedImages, err
 		}
@@ -122,7 +122,6 @@ func (o *Manifest) GetRelatedImagesFromCatalogByFilter(filePath, label string, o
 			return relatedImages, err
 		}
 
-		// TODO:
 		ri, err := getRelatedImageByFilter(o.Log, olm, mp[pkg.Name])
 		if err != nil {
 			return relatedImages, err
@@ -137,26 +136,19 @@ func (o *Manifest) GetRelatedImagesFromCatalogByFilter(filePath, label string, o
 }
 
 // ExtractLayersOCI
-func (o *Manifest) ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISchema) error {
+func (o *Manifest) ExtractLayersOCI(fromPath, toPath, label string, oci *v1alpha3.OCISchema) error {
 	for _, blob := range oci.Layers {
 		if !strings.Contains(blob.Digest, "sha256") {
 			return fmt.Errorf("the digest format is not correct %s ", blob.Digest)
 		}
-		f, err := os.Open(filePath + "/" + strings.Split(blob.Digest, ":")[1])
-		err = untar(f, operatorImageExtractDir, label)
+		f, err := os.Open(fromPath + "/" + strings.Split(blob.Digest, ":")[1])
 		if err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-// ExtractLayers
-func (o *Manifest) ExtractLayers(filePath, name, label string) error {
-	f, err := os.Open(filePath)
-	err = untar(f, filePath+"/"+name, label)
-	if err != nil {
-		return err
+		err = untar(f, toPath, label)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -185,7 +177,7 @@ func untar(gzipStream io.Reader, path string, cfgDirName string) error {
 	cfgDirName = strings.TrimPrefix(cfgDirName, "/")
 	uncompressedStream, err := gzip.NewReader(gzipStream)
 	if err != nil {
-		return fmt.Errorf("untar: NewReader failed - %w", err)
+		return fmt.Errorf("untar: gzipStream - %w", err)
 	}
 
 	tarReader := tar.NewReader(uncompressedStream)
@@ -264,7 +256,7 @@ func getRelatedImageByDefaultChannel(log clog.PluggableLoggerInterface, olm []v1
 				log.Debug("bundle image to use : %v", obj.Entries[0].Name)
 				name, err := semverFindMax(obj.Entries)
 				if err != nil {
-					log.Error("semver %v ", err)
+					log.Error(errorSemver, err)
 				}
 				bundles[name] = true
 			}
@@ -297,7 +289,7 @@ func getRelatedImageByFilter(log clog.PluggableLoggerInterface, olm []v1alpha3.D
 					log.Debug("found channel : %v", obj)
 					name, err := semverFindRange(obj.Entries, pkg.MinVersion, pkg.MaxVersion)
 					if err != nil {
-						log.Error("semver %v ", err)
+						log.Error(errorSemver, err)
 					}
 					for _, x := range name {
 						bundles[x] = true
@@ -306,8 +298,9 @@ func getRelatedImageByFilter(log clog.PluggableLoggerInterface, olm []v1alpha3.D
 			} else {
 				name, err := semverFindMax(obj.Entries)
 				if err != nil {
-					log.Error("semver %v ", err)
+					log.Error(errorSemver, err)
 				}
+				log.Debug("adding channel : %s", name)
 				bundles[name] = true
 			}
 		case obj.Schema == "olm.bundle":

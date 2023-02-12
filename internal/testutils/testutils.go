@@ -3,8 +3,8 @@ package testutils
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -74,7 +74,7 @@ func RegistryFromFiles(source string) http.HandlerFunc {
 			case "manifests":
 				if f, err := dir.Open(req.URL.Path); err == nil {
 					defer f.Close()
-					if data, err := ioutil.ReadAll(f); err == nil {
+					if data, err := io.ReadAll(f); err == nil {
 						var versioned manifest.Versioned
 						if err = json.Unmarshal(data, &versioned); err == nil {
 							w.Header().Set("Content-Type", versioned.MediaType)
@@ -110,13 +110,13 @@ func LocalMirrorFromFiles(source string, destination string) error {
 		default:
 			newSource := filepath.Join(source, relPath)
 			cleanSource := filepath.Clean(newSource)
-			data, err := ioutil.ReadFile(cleanSource)
+			data, err := os.ReadFile(cleanSource)
 			if err != nil {
 				return err
 			}
 			newDest := filepath.Join(destination, relPath)
 			cleanDest := filepath.Clean(newDest)
-			return ioutil.WriteFile(cleanDest, data, 0600)
+			return os.WriteFile(cleanDest, data, 0600)
 		}
 		return nil
 	})

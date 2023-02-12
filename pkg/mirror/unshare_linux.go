@@ -21,7 +21,7 @@ func maybeReexec() error {
 	// With Skopeo we need only the subset of the root capabilities necessary
 	// for pulling an image to the storage.  Do not attempt to create a namespace
 	// if we already have the capabilities we need.
-	capabilities, err := capability.NewPid(0)
+	capabilities, err := capability.NewPid2(0)
 	if err != nil {
 		return fmt.Errorf("error reading the current capabilities sets: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
@@ -237,6 +238,8 @@ type Manifest struct {
 type Cincinnati struct {
 	Config v1alpha2.ImageSetConfiguration
 	Opts   mirror.CopyOptions
+	Client Client
+	Fail   bool
 }
 
 func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, stdout io.Writer) error {
@@ -311,14 +314,10 @@ func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[stri
 	return relatedImages, nil
 }
 
-func (o *Manifest) ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISchema) error {
+func (o *Manifest) ExtractLayersOCI(filePath, toPath, label string, oci *v1alpha3.OCISchema) error {
 	if o.FailExtract {
 		return fmt.Errorf("forced extarct oci fail")
 	}
-	return nil
-}
-
-func (o *Manifest) ExtractLayers(filePath, name, label string) error {
 	return nil
 }
 
@@ -328,4 +327,15 @@ func (o *Cincinnati) GetReleaseReferenceImages(ctx context.Context) map[string]s
 	res["one"] = downloads{}
 	res["two"] = downloads{}
 	return res
+}
+
+func (o *Cincinnati) NewOCPClient(uuid uuid.UUID) (Client, error) {
+	if o.Fail {
+		return o.Client, fmt.Errorf("forced cincinnati client error")
+	}
+	return o.Client, nil
+}
+
+func (o *Cincinnati) NewOKDClient(uuid uuid.UUID) (Client, error) {
+	return o.Client, nil
 }

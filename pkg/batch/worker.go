@@ -42,7 +42,7 @@ func New(log clog.PluggableLoggerInterface,
 	mirror mirror.MirrorInterface,
 	manifest manifest.ManifestInterface,
 ) BatchInterface {
-	return &Batch{Log: log, Config: config, Mirror: mirror, Manifest: manifest}
+	return &Batch{Log: log, Config: config, Opts: opts, Mirror: mirror, Manifest: manifest}
 }
 
 type Batch struct {
@@ -83,6 +83,7 @@ func (o *Batch) Worker(ctx context.Context, images []v1alpha3.RelatedImage, opts
 	o.Log.Info("batch size %d", b.BatchSize)
 	o.Log.Info("remainder size %d", b.Remainder)
 
+	b.CopyImages = images
 	// prepare batching
 
 	wg.Add(b.BatchSize)

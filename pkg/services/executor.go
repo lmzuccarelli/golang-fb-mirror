@@ -39,7 +39,6 @@ var (
 		2. Destination prefix is oci:// - The destination directory specified will be used.
 
 
-		TODO:
 
 		`,
 	)
@@ -48,7 +47,6 @@ var (
 		# Mirror to a directory
 		oc-mirror --config mirror-config.yaml oci:mirror
 
-		TODO:
 		`,
 	)
 )
@@ -165,7 +163,6 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 
 	// do releases
 	if len(cfg.Mirror.Platform.Channels) > 0 {
-		//TODO
 		// add these in the BatchWorker
 		// src := dockerProtocol + release.Spec.Tags[index].From.Name
 		// dest := strings.Split(release.Spec.Tags[index].From.Name, ":")[1]

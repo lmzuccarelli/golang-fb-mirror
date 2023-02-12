@@ -1,24 +1,18 @@
 package services
 
 import (
-	"context"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
-
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/klog/v2"
 )
 
 type RootOptions struct {
 	genericclioptions.IOStreams
-	Dir            string
-	LogLevel       int
-	logfileCleanup func()
+	Dir      string
+	LogLevel int
+	//logfileCleanup func()
 }
 
+/*
 func (o *RootOptions) BindFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&o.Dir, "dir", "d", "oc-mirror-workspace", "Assets directory")
 	fs.IntVarP(&o.LogLevel, "verbose", "v", o.LogLevel, "Number for the log level verbosity (valid 1-9, default is 0)")
@@ -26,6 +20,7 @@ func (o *RootOptions) BindFlags(fs *pflag.FlagSet) {
 		klog.Fatal(err.Error())
 	}
 }
+*/
 
 type MirrorOptions struct {
 	*RootOptions
@@ -52,10 +47,10 @@ type MirrorOptions struct {
 	OCIRegistriesConfig        string
 	OCIInsecureSignaturePolicy bool
 	// cancelCh is a channel listening for command cancellations
-	cancelCh         <-chan struct{}
-	once             sync.Once
-	continuedOnError bool
-	loglevel         string
+	//cancelCh         <-chan struct{}
+	//once sync.Once
+	//continuedOnError bool
+	loglevel string
 	//remoteRegFuncs   RemoteRegFuncs
 }
 
@@ -73,6 +68,7 @@ func (o *MirrorOptions) BindFlags(fs *pflag.FlagSet) {
 		"will not be skipped")
 }
 
+/*
 func (o *MirrorOptions) init() {
 	o.cancelCh = makeCancelCh(syscall.SIGINT, syscall.SIGTERM)
 }
@@ -106,3 +102,4 @@ func makeCancelCh(signals ...os.Signal) <-chan struct{} {
 	}()
 	return resultCh
 }
+*/

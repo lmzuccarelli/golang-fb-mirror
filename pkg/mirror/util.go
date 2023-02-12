@@ -2,7 +2,6 @@ package mirror
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,12 +12,9 @@ import (
 	commonFlag "github.com/containers/common/pkg/flag"
 	"github.com/containers/common/pkg/retry"
 	"github.com/containers/image/v5/manifest"
-	"github.com/containers/image/v5/pkg/compression"
 	"github.com/containers/image/v5/signature"
-	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
 	"github.com/google/uuid"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -209,7 +205,9 @@ func (opts *GlobalOptions) GetPolicyContext() (*signature.PolicyContext, error) 
 // The caller should usually "defer cancel()" immediately after calling this.
 func (opts *GlobalOptions) CommandTimeoutContext() (context.Context, context.CancelFunc) {
 	ctx := context.Background()
-	var cancel context.CancelFunc = func() {}
+	var cancel context.CancelFunc = func() {
+		// empty function - its ok for now
+	}
 	if opts.CommandTimeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, opts.CommandTimeout)
 	}
@@ -323,6 +321,7 @@ func ImageDestFlags(global *GlobalOptions, shared *SharedImageOptions, deprecate
 	return fs, &opts
 }
 
+/*
 // newSystemContext returns a *types.SystemContext corresponding to opts.
 // It is guaranteed to return a fresh instance, so it is safe to make additional updates to it.
 func (opts *imageDestOptions) newSystemContext() (*types.SystemContext, error) {
@@ -348,6 +347,7 @@ func (opts *imageDestOptions) newSystemContext() (*types.SystemContext, error) {
 	ctx.DockerRegistryPushPrecomputeDigests = opts.precomputeDigests
 	return ctx, err
 }
+*/
 
 func parseCreds(creds string) (string, string, error) {
 	if creds == "" {
@@ -374,6 +374,7 @@ func getDockerAuth(creds string) (*types.DockerAuthConfig, error) {
 	}, nil
 }
 
+/*
 // parseImageSource converts image URL-like string to an ImageSource.
 // The caller must call .Close() on the returned ImageSource.
 func parseImageSource(ctx context.Context, opts *imageOptions, name string) (types.ImageSource, error) {
@@ -387,6 +388,7 @@ func parseImageSource(ctx context.Context, opts *imageOptions, name string) (typ
 	}
 	return ref.NewImageSource(ctx, sys)
 }
+*/
 
 // parseManifestFormat parses format parameter for copy and sync command.
 // It returns string value to use as manifest MIME type
@@ -403,6 +405,7 @@ func ParseManifestFormat(manifestFormat string) (string, error) {
 	}
 }
 
+/*
 // usageTemplate returns the usage template for skopeo commands
 // This blocks the displaying of the global options. The main skopeo
 // command should not use this.
@@ -419,13 +422,16 @@ Flags:
 {{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
 {{end}}
 `
+*/
 
+/*
 // adjustUsage uses usageTemplate template to get rid the GlobalOption from usage
 // and disable [flag] at the end of command usage
 func adjustUsage(c *cobra.Command) {
 	c.SetUsageTemplate(usageTemplate)
 	c.DisableFlagsInUseLine = true
 }
+*/
 
 // promptForPassphrase interactively prompts for a passphrase related to privateKeyFile
 func PromptForPassphrase(privateKeyFile string, stdin, stdout *os.File) (string, error) {
@@ -485,6 +491,7 @@ type CopyOptions struct {
 	UUID                     uuid.UUID                 // set uuid
 }
 
+/*
 func parseCatalogJson(data []byte) error {
 	var sch *v1alpha3.DeclarativeConfig
 	newJson := strings.NewReplacer(" ", "").Replace(string(data))
@@ -506,3 +513,4 @@ func parseCatalogJson(data []byte) error {
 	}
 	return nil
 }
+*/

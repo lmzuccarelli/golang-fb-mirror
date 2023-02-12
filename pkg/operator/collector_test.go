@@ -225,7 +225,7 @@ func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[stri
 	return relatedImages, nil
 }
 
-func (o *Manifest) ExtractLayersOCI(filePath, label string, oci *v1alpha3.OCISchema) error {
+func (o *Manifest) ExtractLayersOCI(filePath, toPath, label string, oci *v1alpha3.OCISchema) error {
 	return nil
 }
 

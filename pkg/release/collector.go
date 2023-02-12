@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	catalogJson string = "catalog.json"
-	// TODO: make this global
 	operatorImageExtractDir     string = "hold-operator"
 	workingDir                  string = "working-dir/"
 	dockerProtocol              string = "docker://"
@@ -89,7 +87,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.Relat
 		return []v1alpha3.RelatedImage{}, err
 	}
 
-	err = o.Manifest.ExtractLayersOCI(releaseImageExtractDir, releaseManifests, oci)
+	err = o.Manifest.ExtractLayersOCI(workingDir+releaseImageExtractDir, workingDir+releaseImageExtractDir, releaseManifests, oci)
 	if err != nil {
 		return []v1alpha3.RelatedImage{}, err
 	}

@@ -1,0 +1,6 @@
+projectKey=golang-oci-mirror
+serverUrl=http://192.168.0.15:9000
+serverVersion=9.4.0.54424
+dashboardUrl=http://192.168.0.15:9000/dashboard?id=golang-oci-mirror
+ceTaskId=AYZFp9j74AdbB1h2JvQP
+ceTaskUrl=http://192.168.0.15:9000/api/ce/task?id=AYZFp9j74AdbB1h2JvQP
