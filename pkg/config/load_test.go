@@ -247,3 +247,13 @@ foo: bar
 		})
 	}
 }
+
+func TestReadConfig(t *testing.T) {
+	t.Run("Testing ReadConfig : should pass ", func(t *testing.T) {
+		res, err := ReadConfig("../../tests/isc.yaml")
+		if err != nil {
+			t.Fatalf("should not fail")
+		}
+		require.Equal(t, []string{"amd64"}, res.ImageSetConfigurationSpec.Mirror.Platform.Architectures)
+	})
+}

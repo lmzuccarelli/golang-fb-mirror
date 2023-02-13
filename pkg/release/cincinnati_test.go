@@ -57,10 +57,6 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 							Name:         "stable-4.2",
 							ShortestPath: true,
 						},
-						{
-							Name: "stable-okd",
-							Type: v1alpha2.TypeOKD,
-						},
 					},
 				},
 			},

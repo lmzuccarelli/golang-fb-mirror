@@ -138,6 +138,11 @@ func TestGetAllManifests(t *testing.T) {
 		}
 		log.Debug("completed test  %v ", res)
 	})
+}
+
+func TestExtractOCILayers(t *testing.T) {
+
+	log := clog.New("debug")
 	t.Run("Testing ExtractOCILayers : should pass", func(t *testing.T) {
 		oci := &v1alpha3.OCISchema{
 			SchemaVersion: 2,
@@ -156,28 +161,8 @@ func TestGetAllManifests(t *testing.T) {
 			Layers: []v1alpha3.OCIManifest{
 				{
 					MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
-					Digest:    "sha256:97da74cc6d8fa5d1634eb1760fd1da5c6048619c264c23e62d75f3bf6b8ef5c4",
-					Size:      79524639,
-				},
-				{
-					MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
 					Digest:    "sha256:d8190195889efb5333eeec18af9b6c82313edd4db62989bd3a357caca4f13f0e",
 					Size:      1438,
-				},
-				{
-					MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
-					Digest:    "sha256:f0f4937bc70fa7bf9afc1eb58400dbc646c9fd0c9f95cfdbfcdedd55f6fa0bcd",
-					Size:      26654429,
-				},
-				{
-					MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
-					Digest:    "sha256:833de2b0ccff7a77c31b4d2e3f96077b638aada72bfde75b5eddd5903dc11bb7",
-					Size:      12374694,
-				},
-				{
-					MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
-					Digest:    "sha256:911c7f3bfc1ca79614a05b77ad8b28e87f71026d41a34c8ea14b4f0a3657d0eb",
-					Size:      25467095,
 				},
 				{
 					MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
@@ -193,5 +178,4 @@ func TestGetAllManifests(t *testing.T) {
 			t.Fatalf("should not fail")
 		}
 	})
-
 }

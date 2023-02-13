@@ -59,7 +59,7 @@
 				
 				<option value="file1">github.com/lmzuccarelli/golang-oci-mirror/pkg/config/defaults.go (100.0%)</option>
 				
-				<option value="file2">github.com/lmzuccarelli/golang-oci-mirror/pkg/config/load.go (46.9%)</option>
+				<option value="file2">github.com/lmzuccarelli/golang-oci-mirror/pkg/config/load.go (81.2%)</option>
 				
 				<option value="file3">github.com/lmzuccarelli/golang-oci-mirror/pkg/config/validate.go (95.0%)</option>
 				
@@ -69,13 +69,13 @@
 				
 				<option value="file6">github.com/lmzuccarelli/golang-oci-mirror/pkg/operator/collector.go (85.5%)</option>
 				
-				<option value="file7">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/cincinnati.go (81.4%)</option>
+				<option value="file7">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/cincinnati.go (77.5%)</option>
 				
 				<option value="file8">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/client.go (84.6%)</option>
 				
 				<option value="file9">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/collector.go (95.7%)</option>
 				
-				<option value="file10">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/core-cincinnati.go (84.1%)</option>
+				<option value="file10">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/core-cincinnati.go (83.3%)</option>
 				
 				<option value="file11">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/find.go (95.8%)</option>
 				
@@ -295,20 +295,20 @@ import (
 
 // ReadConfig opens an imageset configuration file at the given path
 // and loads it into a v1alpha2.ImageSetConfiguration instance for processing and validation.
-func ReadConfig(configPath string) (c v1alpha2.ImageSetConfiguration, err error) <span class="cov0" title="0">{
+func ReadConfig(configPath string) (c v1alpha2.ImageSetConfiguration, err error) <span class="cov8" title="1">{
 
         data, err := os.ReadFile(filepath.Clean(configPath))
         if err != nil </span><span class="cov0" title="0">{
                 return c, err
         }</span>
-        <span class="cov0" title="0">typeMeta, err := getTypeMeta(data)
+        <span class="cov8" title="1">typeMeta, err := getTypeMeta(data)
 
         if err != nil </span><span class="cov0" title="0">{
                 return c, err
         }</span>
 
-        <span class="cov0" title="0">switch typeMeta.GroupVersionKind() </span>{
-        case v1alpha2.GroupVersion.WithKind(v1alpha2.ImageSetConfigurationKind):<span class="cov0" title="0">
+        <span class="cov8" title="1">switch typeMeta.GroupVersionKind() </span>{
+        case v1alpha2.GroupVersion.WithKind(v1alpha2.ImageSetConfigurationKind):<span class="cov8" title="1">
                 c, err = LoadConfig(data)
                 if err != nil </span><span class="cov0" title="0">{
                         return c, err
@@ -317,7 +317,7 @@ func ReadConfig(configPath string) (c v1alpha2.ImageSetConfiguration, err error)
                 return c, fmt.Errorf("config GVK not recognized: %s", typeMeta.GroupVersionKind())</span>
         }
 
-        <span class="cov0" title="0">Complete(&amp;c)
+        <span class="cov8" title="1">Complete(&amp;c)
 
         return c, Validate(&amp;c)</span>
 }
@@ -358,11 +358,11 @@ func LoadMetadata(data []byte) (m v1alpha2.Metadata, err error) <span class="cov
         return m, nil</span>
 }
 
-func getTypeMeta(data []byte) (typeMeta metav1.TypeMeta, err error) <span class="cov0" title="0">{
+func getTypeMeta(data []byte) (typeMeta metav1.TypeMeta, err error) <span class="cov8" title="1">{
         if err := yaml.Unmarshal(data, &amp;typeMeta); err != nil </span><span class="cov0" title="0">{
                 return typeMeta, fmt.Errorf("get type meta: %v", err)
         }</span>
-        <span class="cov0" title="0">return typeMeta, nil</span>
+        <span class="cov8" title="1">return typeMeta, nil</span>
 }
 </pre>
 		
@@ -1083,7 +1083,7 @@ func (o *CincinnatiSchema) NewOCPClient(uuid uuid.UUID) (Client, error) <span cl
         <span class="cov8" title="1">return o.Client, nil</span>
 }
 
-func (o *CincinnatiSchema) NewOKDClient(uuid uuid.UUID) (Client, error) <span class="cov8" title="1">{
+func (o *CincinnatiSchema) NewOKDClient(uuid uuid.UUID) (Client, error) <span class="cov0" title="0">{
         return o.Client, nil
 }</span>
 
@@ -1108,7 +1108,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
                                 if err != nil </span><span class="cov8" title="1">{
                                         errs = append(errs, err)
                                 }</span>
-                        case v1alpha2.TypeOKD:<span class="cov8" title="1">
+                        case v1alpha2.TypeOKD:<span class="cov0" title="0">
                                 client, err = o.NewOKDClient(o.Opts.UUID)
                                 if err != nil </span><span class="cov0" title="0">{
                                         errs = append(errs, err)
@@ -1127,7 +1127,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
                                 // Find channel maximum value and only set the minimum as well if heads-only is true
                                 if len(ch.MaxVersion) == 0 </span><span class="cov8" title="1">{
                                         latest, err := GetChannelMinOrMax(ctx, client, arch, ch.Name, false)
-                                        if err != nil </span><span class="cov8" title="1">{
+                                        if err != nil </span><span class="cov0" title="0">{
                                                 errs = append(errs, err)
                                                 continue</span>
                                         }
@@ -1929,7 +1929,7 @@ func GetChannelMinOrMax(ctx context.Context, c Client, arch string, channel stri
         c.SetQueryParams(arch, channel, "")
 
         graph, err := getGraphData(ctx, c)
-        if err != nil </span><span class="cov8" title="1">{
+        if err != nil </span><span class="cov0" title="0">{
                 return semver.Version{}, &amp;Error{
                         Reason:  "APIRequestError",
                         Message: fmt.Sprintf(ChannelInfo, channel, err),
@@ -2107,7 +2107,7 @@ func getGraphData(ctx context.Context, c Client) (graph graph, err error) <span 
                 return graph, &amp;Error{Reason: "ResponseFailed", Message: err.Error(), cause: err}
         }</span>
 
-        <span class="cov8" title="1">if err = json.Unmarshal(body, &amp;graph); err != nil </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">if err = json.Unmarshal(body, &amp;graph); err != nil </span><span class="cov0" title="0">{
                 return graph, &amp;Error{Reason: "ResponseInvalid", Message: err.Error(), cause: err}
         }</span>
 
