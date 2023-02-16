@@ -123,7 +123,6 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 				continue
 			}
 			releaseDownloads.Merge(downloads)
-
 		}
 
 		// Update cfg release channels with maximum and minimum versions

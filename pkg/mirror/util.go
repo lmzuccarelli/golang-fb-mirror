@@ -470,25 +470,26 @@ type CopyOptions struct {
 	SrcImage                 *imageOptions
 	DestImage                *imageDestOptions
 	RetryOpts                *retry.Options
-	AdditionalTags           []string                  // For docker-archive: destinations, in addition to the name:tag specified as destination, also add these
-	RemoveSignatures         bool                      // Do not copy signatures from the source image
-	SignByFingerprint        string                    // Sign the image using a GPG key with the specified fingerprint
-	SignBySigstorePrivateKey string                    // Sign the image using a sigstore private key
-	SignPassphraseFile       string                    // Path pointing to a passphrase file when signing (for either signature format, but only one of them)
-	SignIdentity             string                    // Identity of the signed image, must be a fully specified docker reference
-	DigestFile               string                    // Write digest to this file
-	Format                   commonFlag.OptionalString // Force conversion of the image to a specified format
-	Quiet                    bool                      // Suppress output information when copying images
-	All                      bool                      // Copy all of the images if the source is a list
-	MultiArch                commonFlag.OptionalString // How to handle multi architecture images
-	PreserveDigests          bool                      // Preserve digests during copy
-	EncryptLayer             []int                     // The list of layers to encrypt
-	EncryptionKeys           []string                  // Keys needed to encrypt the image
-	DecryptionKeys           []string                  // Keys needed to decrypt the image
-	Mode                     string                    // 2 options disktoMirror or mirrorToDisk (for now)
-	Dev                      bool                      // developer mode - will be removed when completed
-	Destination              string                    // what to target to
-	UUID                     uuid.UUID                 // set uuid
+	AdditionalTags           []string  // For docker-archive: destinations, in addition to the name:tag specified as destination, also add these
+	RemoveSignatures         bool      // Do not copy signatures from the source image
+	SignByFingerprint        string    // Sign the image using a GPG key with the specified fingerprint
+	SignBySigstorePrivateKey string    // Sign the image using a sigstore private key
+	SignPassphraseFile       string    // Path pointing to a passphrase file when signing (for either signature format, but only one of them)
+	SignIdentity             string    // Identity of the signed image, must be a fully specified docker reference
+	DigestFile               string    // Write digest to this file
+	Format                   string    // Force conversion of the image to a specified format
+	Quiet                    bool      // Suppress output information when copying images
+	All                      bool      // Copy all of the images if the source is a list
+	MultiArch                string    // How to handle multi architecture images
+	PreserveDigests          bool      // Preserve digests during copy
+	EncryptLayer             []int     // The list of layers to encrypt
+	EncryptionKeys           []string  // Keys needed to encrypt the image
+	DecryptionKeys           []string  // Keys needed to decrypt the image
+	Mode                     string    // 2 options disktoMirror or mirrorToDisk (for now)
+	Dev                      bool      // developer mode - will be removed when completed
+	Destination              string    // what to target to
+	UUID                     uuid.UUID // set uuid
+	ImageType                string    // release, catalog-operator, additionalImage
 }
 
 /*

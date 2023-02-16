@@ -11,10 +11,14 @@ import (
 	"github.com/containers/image/manifest"
 	"github.com/containers/image/v5/copy"
 	"github.com/containers/image/v5/pkg/cli"
+	"github.com/containers/image/v5/signature"
 	"github.com/containers/image/v5/transports/alltransports"
-	encconfig "github.com/containers/ocicrypt/config"
-	enchelpers "github.com/containers/ocicrypt/helpers"
+	"github.com/containers/image/v5/types"
 	"github.com/docker/distribution/reference"
+)
+
+const (
+	mirrorToDisk = "mirrorToDisk"
 )
 
 // MirrorInterface  used to mirror images with container/images (skopeo)
@@ -22,21 +26,37 @@ type MirrorInterface interface {
 	Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error)
 }
 
+type MirrorCopyInterface interface {
+	CopyImages(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, opts *copy.Options) ([]byte, error)
+}
+
 // Mirror
-type Mirror struct{}
+type Mirror struct {
+	mc MirrorCopyInterface
+}
+
+type MirrorCopy struct{}
 
 // New returns new Mirror instance
-func New() MirrorInterface {
-	return &Mirror{}
+func New(mc MirrorCopyInterface) MirrorInterface {
+	return &Mirror{mc: mc}
 }
 
-// Run - method to actaull copy images from source to destination
+func NewMirrorCopy() MirrorCopyInterface {
+	return &MirrorCopy{}
+}
+
+// Run - method to copy images from source to destination
 func (o *Mirror) Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
-	return run(ctx, src, dest, opts, stdout)
+	return o.run(ctx, src, dest, opts, stdout)
 }
 
-// run - actual copy images setup and execute
-func run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
+func (o *MirrorCopy) CopyImages(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, co *copy.Options) ([]byte, error) {
+	return copy.Image(ctx, pc, destRef, srcRef, co)
+}
+
+// run - copy images setup and execute
+func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
 
 	opts.DeprecatedTLSVerify.WarnIfUsed([]string{"--src-tls-verify", "--dest-tls-verify"})
 
@@ -75,24 +95,26 @@ func run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Wri
 	}
 
 	var manifestType string
-	if opts.Format.Present() {
-		manifestType, err = ParseManifestFormat(opts.Format.Value())
+	if len(opts.Format) > 0 {
+		manifestType, err = ParseManifestFormat(opts.Format)
 		if err != nil {
 			return err
 		}
 	}
 
-	for _, image := range opts.AdditionalTags {
-		ref, err := reference.ParseNormalizedNamed(image)
-		if err != nil {
-			return fmt.Errorf("error parsing additional-tag '%s': %v", image, err)
+	/*
+		for _, image := range opts.AdditionalTags {
+			ref, err := reference.ParseNormalizedNamed(image)
+			if err != nil {
+				return fmt.Errorf("error parsing additional-tag '%s': %v", image, err)
+			}
+			namedTagged, isNamedTagged := ref.(reference.NamedTagged)
+			if !isNamedTagged {
+				return fmt.Errorf("additional-tag '%s' must be a tagged reference", image)
+			}
+			destinationCtx.DockerArchiveAdditionalTags = append(destinationCtx.DockerArchiveAdditionalTags, namedTagged)
 		}
-		namedTagged, isNamedTagged := ref.(reference.NamedTagged)
-		if !isNamedTagged {
-			return fmt.Errorf("additional-tag '%s' must be a tagged reference", image)
-		}
-		destinationCtx.DockerArchiveAdditionalTags = append(destinationCtx.DockerArchiveAdditionalTags, namedTagged)
-	}
+	*/
 
 	ctx, cancel := opts.Global.CommandTimeoutContext()
 	defer cancel()
@@ -102,15 +124,17 @@ func run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Wri
 	}
 
 	imageListSelection := copy.CopySystemImage
-	if opts.MultiArch.Present() && opts.All {
+	if len(opts.MultiArch) > 0 && opts.All {
 		return fmt.Errorf("Cannot use --all and --multi-arch flags together")
 	}
-	if opts.MultiArch.Present() {
-		imageListSelection, err = parseMultiArch(opts.MultiArch.Value())
+
+	if len(opts.MultiArch) > 0 {
+		imageListSelection, err = parseMultiArch(opts.MultiArch)
 		if err != nil {
 			return err
 		}
 	}
+
 	if opts.All {
 		imageListSelection = copy.CopyAllImages
 	}
@@ -119,37 +143,39 @@ func run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Wri
 		return fmt.Errorf("--encryption-key and --decryption-key cannot be specified together")
 	}
 
-	var encLayers *[]int
-	var encConfig *encconfig.EncryptConfig
-	var decConfig *encconfig.DecryptConfig
+	/*
+		var encLayers *[]int
+		var encConfig *encconfig.EncryptConfig
+		var decConfig *encconfig.DecryptConfig
 
-	if len(opts.EncryptLayer) > 0 && len(opts.EncryptionKeys) == 0 {
-		return fmt.Errorf("--encrypt-layer can only be used with --encryption-key")
-	}
-
-	if len(opts.EncryptionKeys) > 0 {
-		// encryption
-		p := opts.EncryptLayer
-		encLayers = &p
-		encryptionKeys := opts.EncryptionKeys
-		ecc, err := enchelpers.CreateCryptoConfig(encryptionKeys, []string{})
-		if err != nil {
-			return fmt.Errorf("Invalid encryption keys: %v", err)
+		if len(opts.EncryptLayer) > 0 && len(opts.EncryptionKeys) == 0 {
+			return fmt.Errorf("--encrypt-layer can only be used with --encryption-key")
 		}
-		cc := encconfig.CombineCryptoConfigs([]encconfig.CryptoConfig{ecc})
-		encConfig = cc.EncryptConfig
-	}
 
-	if len(opts.DecryptionKeys) > 0 {
-		// decryption
-		decryptionKeys := opts.DecryptionKeys
-		dcc, err := enchelpers.CreateCryptoConfig([]string{}, decryptionKeys)
-		if err != nil {
-			return fmt.Errorf("Invalid decryption keys: %v", err)
+		if len(opts.EncryptionKeys) > 0 {
+			// encryption
+			p := opts.EncryptLayer
+			encLayers = &p
+			encryptionKeys := opts.EncryptionKeys
+			ecc, err := enchelpers.CreateCryptoConfig(encryptionKeys, []string{})
+			if err != nil {
+				return fmt.Errorf("Invalid encryption keys: %v", err)
+			}
+			cc := encconfig.CombineCryptoConfigs([]encconfig.CryptoConfig{ecc})
+			encConfig = cc.EncryptConfig
 		}
-		cc := encconfig.CombineCryptoConfigs([]encconfig.CryptoConfig{dcc})
-		decConfig = cc.DecryptConfig
-	}
+
+		if len(opts.DecryptionKeys) > 0 {
+			// decryption
+			decryptionKeys := opts.DecryptionKeys
+			dcc, err := enchelpers.CreateCryptoConfig([]string{}, decryptionKeys)
+			if err != nil {
+				return fmt.Errorf("Invalid decryption keys: %v", err)
+			}
+			cc := encconfig.CombineCryptoConfigs([]encconfig.CryptoConfig{dcc})
+			decConfig = cc.DecryptConfig
+		}
+	*/
 
 	// c/image/copy.Image does allow creating both simple signing and sigstore signatures simultaneously,
 	// with independent passphrases, but that would make the CLI probably too confusing.
@@ -164,17 +190,10 @@ func run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Wri
 			return err
 		}
 		passphrase = p
-	} else if opts.SignBySigstorePrivateKey != "" {
-		p, err := PromptForPassphrase(opts.SignBySigstorePrivateKey, os.Stdin, os.Stdout)
-		if err != nil {
-			return err
-		}
-		passphrase = p
 	}
 
 	// opts.signByFingerprint triggers a GPG-agent passphrase prompt, possibly using a more secure channel,
 	// so we usually shouldn’t prompt ourselves if no passphrase was explicitly provided.
-
 	var signIdentity reference.Named = nil
 	if opts.SignIdentity != "" {
 		signIdentity, err = reference.ParseNamed(opts.SignIdentity)
@@ -183,24 +202,29 @@ func run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Wri
 		}
 	}
 
+	opts.DigestFile = "test-digest"
+
+	co := &copy.Options{
+		RemoveSignatures:                 opts.RemoveSignatures,
+		SignBy:                           opts.SignByFingerprint,
+		SignPassphrase:                   passphrase,
+		SignBySigstorePrivateKeyFile:     opts.SignBySigstorePrivateKey,
+		SignSigstorePrivateKeyPassphrase: []byte(passphrase),
+		SignIdentity:                     signIdentity,
+		ReportWriter:                     stdout,
+		SourceCtx:                        sourceCtx,
+		DestinationCtx:                   destinationCtx,
+		ForceManifestMIMEType:            manifestType,
+		ImageListSelection:               imageListSelection,
+		PreserveDigests:                  opts.PreserveDigests,
+		//OciDecryptConfig:                 decConfig,
+		//OciEncryptLayers:                 encLayers,
+		//OciEncryptConfig:                 encConfig,
+	}
+
 	return retry.IfNecessary(ctx, func() error {
-		manifestBytes, err := copy.Image(ctx, policyContext, destRef, srcRef, &copy.Options{
-			RemoveSignatures:                 opts.RemoveSignatures,
-			SignBy:                           opts.SignByFingerprint,
-			SignPassphrase:                   passphrase,
-			SignBySigstorePrivateKeyFile:     opts.SignBySigstorePrivateKey,
-			SignSigstorePrivateKeyPassphrase: []byte(passphrase),
-			SignIdentity:                     signIdentity,
-			ReportWriter:                     stdout,
-			SourceCtx:                        sourceCtx,
-			DestinationCtx:                   destinationCtx,
-			ForceManifestMIMEType:            manifestType,
-			ImageListSelection:               imageListSelection,
-			PreserveDigests:                  opts.PreserveDigests,
-			OciDecryptConfig:                 decConfig,
-			OciEncryptLayers:                 encLayers,
-			OciEncryptConfig:                 encConfig,
-		})
+		//manifestBytes, err := copy.Image(ctx, policyContext, destRef, srcRef, &copy.Options{
+		manifestBytes, err := o.mc.CopyImages(ctx, policyContext, destRef, srcRef, co)
 		if err != nil {
 			return err
 		}

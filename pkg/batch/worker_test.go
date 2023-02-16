@@ -31,87 +31,8 @@ func TestWorker(t *testing.T) {
 		Dev:                 false,
 		Mode:                mirrorToDisk,
 	}
-	cfg := v1alpha2.ImageSetConfiguration{
-		ImageSetConfigurationSpec: v1alpha2.ImageSetConfigurationSpec{
-			Mirror: v1alpha2.Mirror{
-				Platform: v1alpha2.Platform{
-					Graph: true,
-					Channels: []v1alpha2.ReleaseChannel{
-						{
-							Name: "stable-4.7",
-						},
-						{
-							Name:       "stable-4.6",
-							MinVersion: "4.6.3",
-							MaxVersion: "4.6.13",
-						},
-						{
-							Name: "okd",
-							Type: v1alpha2.TypeOKD,
-						},
-					},
-				},
-				Operators: []v1alpha2.Operator{
-					{
-						Catalog: "redhat-operators:v4.7",
-						Full:    true,
-					},
-					{
-						Catalog: "certified-operators:v4.7",
-						Full:    true,
-						IncludeConfig: v1alpha2.IncludeConfig{
-							Packages: []v1alpha2.IncludePackage{
-								{Name: "couchbase-operator"},
-								{
-									Name: "mongodb-operator",
-									IncludeBundle: v1alpha2.IncludeBundle{
-										MinVersion: "1.4.0",
-									},
-								},
-								{
-									Name: "crunchy-postgresql-operator",
-									Channels: []v1alpha2.IncludeChannel{
-										{Name: "stable"},
-									},
-								},
-							},
-						},
-					},
-					{
-						Catalog: "community-operators:v4.7",
-					},
-				},
-				AdditionalImages: []v1alpha2.Image{
-					{Name: "registry.redhat.io/ubi8/ubi:latest"},
-				},
-				Helm: v1alpha2.Helm{
-					Repositories: []v1alpha2.Repository{
-						{
-							URL:  "https://stefanprodan.github.io/podinfo",
-							Name: "podinfo",
-							Charts: []v1alpha2.Chart{
-								{Name: "podinfo", Version: "5.0.0"},
-							},
-						},
-					},
-					Local: []v1alpha2.Chart{
-						{Name: "podinfo", Path: "/test/podinfo-5.0.0.tar.gz"},
-					},
-				},
-				BlockedImages: []v1alpha2.Image{
-					{Name: "alpine"},
-					{Name: "redis"},
-				},
-				Samples: []v1alpha2.SampleImages{
-					{Image: v1alpha2.Image{Name: "ruby"}},
-					{Image: v1alpha2.Image{Name: "python"}},
-					{Image: v1alpha2.Image{Name: "nginx"}},
-				},
-			},
-		},
-	}
 
-	w := New(log, cfg, opts, &Mirror{}, &Manifest{})
+	w := New(log, &Mirror{}, &Manifest{})
 
 	// this is a facade to get code coverage up
 	t.Run("Testing Worker : should pass", func(t *testing.T) {

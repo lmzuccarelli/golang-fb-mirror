@@ -3,6 +3,7 @@ package release
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -28,6 +29,7 @@ const (
 	BATCH_SIZE                  int    = 8
 	diskToMirror                string = "diskToMirror"
 	mirrorToDisk                string = "mirrorToDisk"
+	errMsg                      string = " [ReleaseImageCollector] %v "
 )
 
 type CollectorInterface interface {
@@ -61,37 +63,44 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.Relat
 	writer := bufio.NewWriter(os.Stdout)
 	releases := o.Cincinnati.GetReleaseReferenceImages(ctx)
 
-	for key := range releases {
-		//args := []string{dockerProtocol + key, ociProtocol + workingDir + releaseImageDir, "true"}
-		o.Log.Info("copying image %s ", key)
-		src := dockerProtocol + key
-		dest := ociProtocol + workingDir + releaseImageDir
-		err := o.Mirror.Run(ctx, src, dest, &o.Opts, writer)
-		if err != nil {
-			return []v1alpha3.RelatedImage{}, err
+	// dev mode debugging
+	if !o.Opts.Dev {
+		for key := range releases {
+			o.Log.Info("copying image %s ", key)
+			src := dockerProtocol + key
+			dest := ociProtocol + workingDir + releaseImageDir
+			err := o.Mirror.Run(ctx, src, dest, &o.Opts, writer)
+			if err != nil {
+				return []v1alpha3.RelatedImage{}, fmt.Errorf(errMsg, err)
+			}
+			o.Log.Debug("copied release index image %s ", key)
 		}
 	}
 
 	oci, err := o.Manifest.GetImageIndex(workingDir + releaseImageDir)
 	if err != nil {
-		o.Log.Error(" %v ", err)
-		return []v1alpha3.RelatedImage{}, err
+		o.Log.Error(" [ReleaseImageCollector] %v ", err)
+		return []v1alpha3.RelatedImage{}, fmt.Errorf(errMsg, err)
 	}
 
 	//read the link to the manifest
+	if len(oci.Manifests) == 0 {
+		return []v1alpha3.RelatedImage{}, fmt.Errorf(errMsg, " image index not found ")
+	}
 	manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
-	o.Log.Info("manifest %v", manifest)
+	o.Log.Debug("image index %v", manifest)
 
 	oci, err = o.Manifest.GetImageManifest(workingDir + releaseImageDir + blobsDir + manifest)
 	if err != nil {
-		return []v1alpha3.RelatedImage{}, err
+		return []v1alpha3.RelatedImage{}, fmt.Errorf(errMsg, err)
 	}
+	o.Log.Debug("manifest %v ", oci.Config.Digest)
 
-	err = o.Manifest.ExtractLayersOCI(workingDir+releaseImageExtractDir, workingDir+releaseImageExtractDir, releaseManifests, oci)
+	err = o.Manifest.ExtractLayersOCI(workingDir+releaseImageDir+blobsDir, workingDir+releaseImageExtractDir, releaseManifests, oci)
 	if err != nil {
-		return []v1alpha3.RelatedImage{}, err
+		return []v1alpha3.RelatedImage{}, fmt.Errorf(errMsg, err)
 	}
+	o.Log.Debug("extracted oci layer %s ", workingDir+releaseImageExtractDir)
 
 	return o.Manifest.GetReleaseSchema(workingDir + releaseImageExtractFullPath)
-
 }

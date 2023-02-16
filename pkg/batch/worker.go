@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
@@ -37,20 +36,16 @@ type BatchInterface interface {
 }
 
 func New(log clog.PluggableLoggerInterface,
-	config v1alpha2.ImageSetConfiguration,
-	opts mirror.CopyOptions,
 	mirror mirror.MirrorInterface,
 	manifest manifest.ManifestInterface,
 ) BatchInterface {
-	return &Batch{Log: log, Config: config, Opts: opts, Mirror: mirror, Manifest: manifest}
+	return &Batch{Log: log, Mirror: mirror, Manifest: manifest}
 }
 
 type Batch struct {
 	Log      clog.PluggableLoggerInterface
 	Mirror   mirror.MirrorInterface
 	Manifest manifest.ManifestInterface
-	Config   v1alpha2.ImageSetConfiguration
-	Opts     mirror.CopyOptions
 }
 
 type BatchSchema struct {
@@ -67,6 +62,7 @@ func (o *Batch) Worker(ctx context.Context, images []v1alpha3.RelatedImage, opts
 
 	var errArray []error
 	var wg sync.WaitGroup
+	var src, dest string
 
 	var b *BatchSchema
 	imgs := len(images)
@@ -77,35 +73,53 @@ func (o *Batch) Worker(ctx context.Context, images []v1alpha3.RelatedImage, opts
 	}
 
 	writer := bufio.NewWriter(os.Stdout)
-	o.Log.Info("images to mirror %d", b.Items)
-	o.Log.Info("batch count %d", b.Count)
-	o.Log.Info("batch index %d", b.BatchIndex)
-	o.Log.Info("batch size %d", b.BatchSize)
-	o.Log.Info("remainder size %d", b.Remainder)
+	o.Log.Info("images to mirror %d ", b.Items)
+	o.Log.Info("batch count %d ", b.Count)
+	o.Log.Info("batch index %d ", b.BatchIndex)
+	o.Log.Info("batch size %d ", b.BatchSize)
+	o.Log.Info("remainder size %d ", b.Remainder)
+	o.Log.Info("image type %s ", opts.ImageType)
 
 	b.CopyImages = images
-	// prepare batching
+	if !strings.Contains(opts.Destination, ociProtocol) {
+		return fmt.Errorf("destination must use oci: prefix")
+	}
+	dir := strings.Split(opts.Destination, ":")[1]
 
+	// prepare batching
 	wg.Add(b.BatchSize)
 	for i := 0; i < b.Count; i++ {
 		o.Log.Info(fmt.Sprintf("starting batch %d ", i))
 		for x := 0; x < b.BatchSize; x++ {
 			index := (i * b.BatchSize) + x
-			irs, err := customImageParser(b.CopyImages[index].Image)
-			if err != nil {
-				o.Log.Error("%v", err)
-				continue
-			}
-			// ignore the failure as it will be picked up in the Run
-			err = os.MkdirAll(strings.Split(opts.Destination, ":")[1]+"/"+irs.Namespace, 0750)
-			if err != nil {
-				return err
-			}
-			src := dockerProtocol + b.CopyImages[index].Image
-			dest := opts.Destination + "/" + irs.Namespace + "/" + irs.Component
+			if opts.ImageType == "operator" {
+				irs, err := customImageParser(b.CopyImages[index].Image)
+				if err != nil {
+					o.Log.Error(" [Worker] %v", err)
+					return err
+				}
+				err = os.MkdirAll(workingDir+dir+"/"+irs.Namespace, 0750)
+				if err != nil {
+					o.Log.Error(" [Worker] %v", err)
+					return err
+				}
+				src = dockerProtocol + b.CopyImages[index].Image
+				dest = opts.Destination + "/" + irs.Namespace + "/" + irs.Component
 
-			o.Log.Debug("source %s ", b.CopyImages[index].Image)
-			o.Log.Debug("destination %s ", opts.Destination+"/"+irs.Namespace+"/"+irs.Component)
+				o.Log.Debug("source %s ", b.CopyImages[index].Image)
+				o.Log.Debug("destination %s ", opts.Destination+"/"+irs.Namespace+"/"+irs.Component)
+			}
+			if opts.ImageType == "release" {
+				src = dockerProtocol + b.CopyImages[index].Image
+				dest = ociProtocol + workingDir + dir + "/" + b.CopyImages[index].Name
+				err := os.MkdirAll(workingDir+dir+"/"+b.CopyImages[index].Name, 0750)
+				if err != nil {
+					o.Log.Error(" [Worker] %v", err)
+					return err
+				}
+				o.Log.Debug("source %s ", src)
+				o.Log.Debug("destination %s ", dest)
+			}
 
 			go func(ctx context.Context, src, dest string, opts *mirror.CopyOptions, writer io.Writer) {
 				defer wg.Done()
@@ -129,11 +143,10 @@ func (o *Batch) Worker(ctx context.Context, images []v1alpha3.RelatedImage, opts
 		}
 	}
 	if b.Remainder > 0 {
-		//b.BatchIndex = b.Count
-		//b.Count = b.Remainder
-		//b.BatchSize = 1
 		// one level of simple recursion
-		err := o.Worker(ctx, images[b.Count:], o.Opts)
+		i := b.Count * BATCH_SIZE
+		o.Log.Info("executing remainder ")
+		err := o.Worker(ctx, images[i:], opts)
 		if err != nil {
 			return err
 		}

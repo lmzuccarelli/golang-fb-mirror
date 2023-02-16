@@ -165,7 +165,7 @@ func (o *Manifest) GetReleaseSchema(filePath string) ([]v1alpha3.RelatedImage, e
 
 	var allImages []v1alpha3.RelatedImage
 	for _, item := range release.Spec.Tags {
-		allImages = append(allImages, v1alpha3.RelatedImage{Image: item.Name})
+		allImages = append(allImages, v1alpha3.RelatedImage{Image: item.From.Name, Name: item.Name})
 	}
 	return allImages, nil
 }

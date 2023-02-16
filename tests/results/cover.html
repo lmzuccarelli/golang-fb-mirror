@@ -67,21 +67,27 @@
 				
 				<option value="file5">github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest/oci-manifest.go (80.6%)</option>
 				
-				<option value="file6">github.com/lmzuccarelli/golang-oci-mirror/pkg/operator/collector.go (85.5%)</option>
+				<option value="file6">github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror/mirror.go (66.2%)</option>
 				
-				<option value="file7">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/cincinnati.go (77.5%)</option>
+				<option value="file7">github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror/unshare_linux.go (30.8%)</option>
 				
-				<option value="file8">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/client.go (84.6%)</option>
+				<option value="file8">github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror/util.go (60.4%)</option>
 				
-				<option value="file9">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/collector.go (95.7%)</option>
+				<option value="file9">github.com/lmzuccarelli/golang-oci-mirror/pkg/operator/collector.go (85.5%)</option>
 				
-				<option value="file10">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/core-cincinnati.go (83.3%)</option>
+				<option value="file10">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/cincinnati.go (77.5%)</option>
 				
-				<option value="file11">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/find.go (95.8%)</option>
+				<option value="file11">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/client.go (84.6%)</option>
 				
-				<option value="file12">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/executor.go (89.8%)</option>
+				<option value="file12">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/collector.go (95.7%)</option>
 				
-				<option value="file13">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/options.go (100.0%)</option>
+				<option value="file13">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/core-cincinnati.go (83.3%)</option>
+				
+				<option value="file14">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/find.go (95.8%)</option>
+				
+				<option value="file15">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/executor.go (92.6%)</option>
+				
+				<option value="file16">github.com/lmzuccarelli/golang-oci-mirror/pkg/services/options.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -862,7 +868,840 @@ func semverFindRange(entries []v1alpha3.ChannelEntry, min, max string) ([]string
 }
 </pre>
 		
-		<pre class="file" id="file6" style="display: none">package operator
+		<pre class="file" id="file6" style="display: none">package mirror
+
+import (
+        "context"
+        "fmt"
+        "io"
+        "os"
+        "strconv"
+
+        "github.com/containers/common/pkg/retry"
+        "github.com/containers/image/manifest"
+        "github.com/containers/image/v5/copy"
+        "github.com/containers/image/v5/pkg/cli"
+        "github.com/containers/image/v5/signature"
+        "github.com/containers/image/v5/transports/alltransports"
+        "github.com/containers/image/v5/types"
+        "github.com/docker/distribution/reference"
+)
+
+const (
+        mirrorToDisk = "mirrorToDisk"
+)
+
+// MirrorInterface  used to mirror images with container/images (skopeo)
+type MirrorInterface interface {
+        Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error)
+}
+
+type MirrorCopyInterface interface {
+        CopyImages(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, opts *copy.Options) ([]byte, error)
+}
+
+// Mirror
+type Mirror struct {
+        mc MirrorCopyInterface
+}
+
+type MirrorCopy struct{}
+
+// New returns new Mirror instance
+func New(mc MirrorCopyInterface) MirrorInterface <span class="cov8" title="1">{
+        return &amp;Mirror{mc: mc}
+}</span>
+
+func NewMirrorCopy() MirrorCopyInterface <span class="cov0" title="0">{
+        return &amp;MirrorCopy{}
+}</span>
+
+// Run - method to copy images from source to destination
+func (o *Mirror) Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) <span class="cov8" title="1">{
+        return o.run(ctx, src, dest, opts, stdout)
+}</span>
+
+func (o *MirrorCopy) CopyImages(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, co *copy.Options) ([]byte, error) <span class="cov0" title="0">{
+        return copy.Image(ctx, pc, destRef, srcRef, co)
+}</span>
+
+// run - copy images setup and execute
+func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) <span class="cov8" title="1">{
+
+        opts.DeprecatedTLSVerify.WarnIfUsed([]string{"--src-tls-verify", "--dest-tls-verify"})
+
+        opts.RemoveSignatures, _ = strconv.ParseBool("true")
+
+        if err := ReexecIfNecessaryForImages([]string{src, dest}...); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">policyContext, err := opts.Global.GetPolicyContext()
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("Error loading trust policy: %v", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{
+                if err := policyContext.Destroy(); err != nil </span><span class="cov0" title="0">{
+                        retErr = NoteCloseFailure(retErr, "tearing down policy context", err)
+                }</span>
+        }()
+
+        <span class="cov8" title="1">srcRef, err := alltransports.ParseImageName(src)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("Invalid source name %s: %v", src, err)
+        }</span>
+        <span class="cov8" title="1">destRef, err := alltransports.ParseImageName(dest)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("Invalid destination name %s: %v", dest, err)
+        }</span>
+
+        <span class="cov8" title="1">sourceCtx, err := opts.SrcImage.NewSystemContext()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">destinationCtx, err := opts.DestImage.NewSystemContext()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">var manifestType string
+        if len(opts.Format) &gt; 0 </span><span class="cov8" title="1">{
+                manifestType, err = ParseManifestFormat(opts.Format)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+
+        /*
+                for _, image := range opts.AdditionalTags {
+                        ref, err := reference.ParseNormalizedNamed(image)
+                        if err != nil {
+                                return fmt.Errorf("error parsing additional-tag '%s': %v", image, err)
+                        }
+                        namedTagged, isNamedTagged := ref.(reference.NamedTagged)
+                        if !isNamedTagged {
+                                return fmt.Errorf("additional-tag '%s' must be a tagged reference", image)
+                        }
+                        destinationCtx.DockerArchiveAdditionalTags = append(destinationCtx.DockerArchiveAdditionalTags, namedTagged)
+                }
+        */
+
+        <span class="cov8" title="1">ctx, cancel := opts.Global.CommandTimeoutContext()
+        defer cancel()
+
+        if opts.Quiet </span><span class="cov0" title="0">{
+                stdout = nil
+        }</span>
+
+        <span class="cov8" title="1">imageListSelection := copy.CopySystemImage
+        if len(opts.MultiArch) &gt; 0 &amp;&amp; opts.All </span><span class="cov0" title="0">{
+                return fmt.Errorf("Cannot use --all and --multi-arch flags together")
+        }</span>
+
+        <span class="cov8" title="1">if len(opts.MultiArch) &gt; 0 </span><span class="cov8" title="1">{
+                imageListSelection, err = parseMultiArch(opts.MultiArch)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+
+        <span class="cov8" title="1">if opts.All </span><span class="cov0" title="0">{
+                imageListSelection = copy.CopyAllImages
+        }</span>
+
+        <span class="cov8" title="1">if len(opts.EncryptionKeys) &gt; 0 &amp;&amp; len(opts.DecryptionKeys) &gt; 0 </span><span class="cov0" title="0">{
+                return fmt.Errorf("--encryption-key and --decryption-key cannot be specified together")
+        }</span>
+
+        /*
+                var encLayers *[]int
+                var encConfig *encconfig.EncryptConfig
+                var decConfig *encconfig.DecryptConfig
+
+                if len(opts.EncryptLayer) &gt; 0 &amp;&amp; len(opts.EncryptionKeys) == 0 {
+                        return fmt.Errorf("--encrypt-layer can only be used with --encryption-key")
+                }
+
+                if len(opts.EncryptionKeys) &gt; 0 {
+                        // encryption
+                        p := opts.EncryptLayer
+                        encLayers = &amp;p
+                        encryptionKeys := opts.EncryptionKeys
+                        ecc, err := enchelpers.CreateCryptoConfig(encryptionKeys, []string{})
+                        if err != nil {
+                                return fmt.Errorf("Invalid encryption keys: %v", err)
+                        }
+                        cc := encconfig.CombineCryptoConfigs([]encconfig.CryptoConfig{ecc})
+                        encConfig = cc.EncryptConfig
+                }
+
+                if len(opts.DecryptionKeys) &gt; 0 {
+                        // decryption
+                        decryptionKeys := opts.DecryptionKeys
+                        dcc, err := enchelpers.CreateCryptoConfig([]string{}, decryptionKeys)
+                        if err != nil {
+                                return fmt.Errorf("Invalid decryption keys: %v", err)
+                        }
+                        cc := encconfig.CombineCryptoConfigs([]encconfig.CryptoConfig{dcc})
+                        decConfig = cc.DecryptConfig
+                }
+        */
+
+        // c/image/copy.Image does allow creating both simple signing and sigstore signatures simultaneously,
+        // with independent passphrases, but that would make the CLI probably too confusing.
+        // For now, use the passphrase with either, but only one of them.
+        <span class="cov8" title="1">if opts.SignPassphraseFile != "" &amp;&amp; opts.SignByFingerprint != "" &amp;&amp; opts.SignBySigstorePrivateKey != "" </span><span class="cov0" title="0">{
+                return fmt.Errorf("Only one of --sign-by and sign-by-sigstore-private-key can be used with sign-passphrase-file")
+        }</span>
+        <span class="cov8" title="1">var passphrase string
+        if opts.SignPassphraseFile != "" </span><span class="cov8" title="1">{
+                p, err := cli.ReadPassphraseFile(opts.SignPassphraseFile)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">passphrase = p</span>
+        }
+
+        // opts.signByFingerprint triggers a GPG-agent passphrase prompt, possibly using a more secure channel,
+        // so we usually shouldn’t prompt ourselves if no passphrase was explicitly provided.
+        <span class="cov8" title="1">var signIdentity reference.Named = nil
+        if opts.SignIdentity != "" </span><span class="cov0" title="0">{
+                signIdentity, err = reference.ParseNamed(opts.SignIdentity)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("Could not parse --sign-identity: %v", err)
+                }</span>
+        }
+
+        <span class="cov8" title="1">opts.DigestFile = "test-digest"
+
+        co := &amp;copy.Options{
+                RemoveSignatures:                 opts.RemoveSignatures,
+                SignBy:                           opts.SignByFingerprint,
+                SignPassphrase:                   passphrase,
+                SignBySigstorePrivateKeyFile:     opts.SignBySigstorePrivateKey,
+                SignSigstorePrivateKeyPassphrase: []byte(passphrase),
+                SignIdentity:                     signIdentity,
+                ReportWriter:                     stdout,
+                SourceCtx:                        sourceCtx,
+                DestinationCtx:                   destinationCtx,
+                ForceManifestMIMEType:            manifestType,
+                ImageListSelection:               imageListSelection,
+                PreserveDigests:                  opts.PreserveDigests,
+                //OciDecryptConfig:                 decConfig,
+                //OciEncryptLayers:                 encLayers,
+                //OciEncryptConfig:                 encConfig,
+        }
+
+        return retry.IfNecessary(ctx, func() error </span><span class="cov8" title="1">{
+                //manifestBytes, err := copy.Image(ctx, policyContext, destRef, srcRef, &amp;copy.Options{
+                manifestBytes, err := o.mc.CopyImages(ctx, policyContext, destRef, srcRef, co)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">if opts.DigestFile != "" </span><span class="cov8" title="1">{
+                        manifestDigest, err := manifest.Digest(manifestBytes)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+                        <span class="cov8" title="1">if err = os.WriteFile(opts.DigestFile, []byte(manifestDigest.String()), 0644); err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("Failed to write digest to file %q: %w", opts.DigestFile, err)
+                        }</span>
+                }
+                <span class="cov8" title="1">return nil</span>
+        }, opts.RetryOpts)
+}
+
+// parseMultiArch
+func parseMultiArch(multiArch string) (copy.ImageListSelection, error) <span class="cov8" title="1">{
+        switch multiArch </span>{
+        case "system":<span class="cov0" title="0">
+                return copy.CopySystemImage, nil</span>
+        case "all":<span class="cov8" title="1">
+                return copy.CopyAllImages, nil</span>
+        // There is no CopyNoImages value in copy.ImageListSelection, but because we
+        // don't provide an option to select a set of images to copy, we can use
+        // CopySpecificImages.
+        case "index-only":<span class="cov0" title="0">
+                return copy.CopySpecificImages, nil</span>
+        // We don't expose CopySpecificImages other than index-only above, because
+        // we currently don't provide an option to choose the images to copy. That
+        // could be added in the future.
+        default:<span class="cov0" title="0">
+                return copy.CopySystemImage, fmt.Errorf("unknown multi-arch option %q. Choose one of the supported options: 'system', 'all', or 'index-only'", multiArch)</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package mirror
+
+import (
+        "fmt"
+
+        "github.com/containers/image/v5/transports/alltransports"
+        "github.com/containers/storage/pkg/unshare"
+        "github.com/syndtr/gocapability/capability"
+)
+
+var neededCapabilities = []capability.Cap{
+        capability.CAP_CHOWN,
+        capability.CAP_DAC_OVERRIDE,
+        capability.CAP_FOWNER,
+        capability.CAP_FSETID,
+        capability.CAP_MKNOD,
+        capability.CAP_SETFCAP,
+}
+
+func maybeReexec() error <span class="cov0" title="0">{
+        // With Skopeo we need only the subset of the root capabilities necessary
+        // for pulling an image to the storage.  Do not attempt to create a namespace
+        // if we already have the capabilities we need.
+        capabilities, err := capability.NewPid2(0)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error reading the current capabilities sets: %w", err)
+        }</span>
+        <span class="cov0" title="0">for _, cap := range neededCapabilities </span><span class="cov0" title="0">{
+                if !capabilities.Get(capability.EFFECTIVE, cap) </span><span class="cov0" title="0">{
+                        // We miss a capability we need, create a user namespaces
+                        unshare.MaybeReexecUsingUserNamespace(true)
+                        return nil
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func ReexecIfNecessaryForImages(imageNames ...string) error <span class="cov8" title="1">{
+        // Check if container-storage is used before doing unshare
+        for _, imageName := range imageNames </span><span class="cov8" title="1">{
+                transport := alltransports.TransportFromImageName(imageName)
+                // Hard-code the storage name to avoid a reference on c/image/storage.
+                // See https://github.com/containers/skopeo/issues/771#issuecomment-563125006.
+                if transport != nil &amp;&amp; transport.Name() == "containers-storage" </span><span class="cov0" title="0">{
+                        return maybeReexec()
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package mirror
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "io"
+        "os"
+        "strings"
+        "time"
+
+        commonFlag "github.com/containers/common/pkg/flag"
+        "github.com/containers/common/pkg/retry"
+        "github.com/containers/image/v5/manifest"
+        "github.com/containers/image/v5/signature"
+        "github.com/containers/image/v5/types"
+        "github.com/google/uuid"
+        imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+        "github.com/sirupsen/logrus"
+        "github.com/spf13/cobra"
+        "github.com/spf13/pflag"
+        "golang.org/x/term"
+)
+
+const defaultUserAgent string = "skopeo/v.19.5"
+
+// errorShouldDisplayUsage is a subtype of error used by command handlers to indicate that cli.ShowSubcommandHelp should be called.
+type ErrorShouldDisplayUsage struct {
+        Error error
+}
+
+// noteCloseFailure returns (possibly-nil) err modified to account for (non-nil) closeErr.
+// The error for closeErr is annotated with description (which is not a format string)
+// Typical usage:
+//
+//        defer func() {
+//                if err := something.Close(); err != nil {
+//                        returnedErr = noteCloseFailure(returnedErr, "closing something", err)
+//                }
+//        }
+func NoteCloseFailure(err error, description string, closeErr error) error <span class="cov0" title="0">{
+        // We don’t accept a Closer() and close it ourselves because signature.PolicyContext has .Destroy(), not .Close().
+        // This also makes it harder for a caller to do
+        //     defer noteCloseFailure(returnedErr, …)
+        // which doesn’t use the right value of returnedErr, and doesn’t update it.
+        if err == nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("%s: %w", description, closeErr)
+        }</span>
+        // In this case we prioritize the primary error for use with %w; closeErr is usually less relevant, or might be a consequence of the primary erorr.
+        <span class="cov0" title="0">return fmt.Errorf("%w (%s: %v)", err, description, closeErr)</span>
+}
+
+// commandAction intermediates between the RunE interface and the real handler,
+// primarily to ensure that cobra.Command is not available to the handler, which in turn
+// makes sure that the cmd.Flags() etc. flag access functions are not used,
+// and everything is done using the *Options structures and the *Var() methods of cmd.Flag().
+// handler may return errorShouldDisplayUsage to cause c.Help to be called.
+func CommandAction(handler func(args []string, stdout io.Writer) error) func(cmd *cobra.Command, args []string) error <span class="cov0" title="0">{
+        return func(c *cobra.Command, args []string) error </span><span class="cov0" title="0">{
+                err := handler(args, c.OutOrStdout())
+                //var shouldDisplayUsage = &amp;ErrorShouldDisplayUsage{}
+                //if errors.As(err, &amp;ErrorShouldDisplayUsage{}) {
+                //        return c.Help()
+                //}
+                return err
+        }</span>
+}
+
+// deprecatedTLSVerifyOption represents a deprecated --tls-verify option,
+// which was accepted for all subcommands, for a time.
+// Every user should call deprecatedTLSVerifyOption.warnIfUsed() as part of handling the CLI,
+// whether or not the value actually ends up being used.
+// DO NOT ADD ANY NEW USES OF THIS; just call dockerImageFlags with an appropriate, possibly empty, flagPrefix.
+type DeprecatedTLSVerifyOption struct {
+        tlsVerify commonFlag.OptionalBool // FIXME FIXME: Warn if this is used, or even if it is ignored.
+}
+
+// warnIfUsed warns if tlsVerify was set by the user, and suggests alternatives (which should
+// start with "--").
+// Every user should call this as part of handling the CLI, whether or not the value actually
+// ends up being used.
+func (opts *DeprecatedTLSVerifyOption) WarnIfUsed(alternatives []string) <span class="cov8" title="1">{
+        if opts.tlsVerify.Present() </span><span class="cov0" title="0">{
+                logrus.Warnf("'--tls-verify' is deprecated, instead use: %s", strings.Join(alternatives, ", "))
+        }</span>
+}
+
+// deprecatedTLSVerifyFlags prepares the CLI flag writing into deprecatedTLSVerifyOption, and the managed deprecatedTLSVerifyOption structure.
+// DO NOT ADD ANY NEW USES OF THIS; just call dockerImageFlags with an appropriate, possibly empty, flagPrefix.
+func DeprecatedTLSVerifyFlags() (pflag.FlagSet, *DeprecatedTLSVerifyOption) <span class="cov8" title="1">{
+        opts := DeprecatedTLSVerifyOption{}
+        fs := pflag.FlagSet{}
+        flag := commonFlag.OptionalBoolFlag(&amp;fs, &amp;opts.tlsVerify, "tls-verify", "require HTTPS and verify certificates when accessing the container registry")
+        flag.Hidden = true
+        return fs, &amp;opts
+}</span>
+
+// sharedImageOptions collects CLI flags which are image-related, but do not change across images.
+// This really should be a part of globalOptions, but that would break existing users of (skopeo copy --authfile=).
+type SharedImageOptions struct {
+        authFilePath string // Path to a */containers/auth.json
+}
+
+// sharedImageFlags prepares a collection of CLI flags writing into sharedImageOptions, and the managed sharedImageOptions structure.
+func SharedImageFlags() (pflag.FlagSet, *SharedImageOptions) <span class="cov8" title="1">{
+        opts := SharedImageOptions{}
+        fs := pflag.FlagSet{}
+        fs.StringVar(&amp;opts.authFilePath, "authfile", os.Getenv("REGISTRY_AUTH_FILE"), "path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json")
+        return fs, &amp;opts
+}</span>
+
+// dockerImageOptions collects CLI flags specific to the "docker" transport, which are
+// the same across subcommands, but may be different for each image
+// (e.g. may differ between the source and destination of a copy)
+type dockerImageOptions struct {
+        global              *GlobalOptions             // May be shared across several imageOptions instances.
+        shared              *SharedImageOptions        // May be shared across several imageOptions instances.
+        deprecatedTLSVerify *DeprecatedTLSVerifyOption // May be shared across several imageOptions instances, or nil.
+        authFilePath        commonFlag.OptionalString  // Path to a */containers/auth.json (prefixed version to override shared image option).
+        credsOption         commonFlag.OptionalString  // username[:password] for accessing a registry
+        userName            commonFlag.OptionalString  // username for accessing a registry
+        password            commonFlag.OptionalString  // password for accessing a registry
+        registryToken       commonFlag.OptionalString  // token to be used directly as a Bearer token when accessing the registry
+        dockerCertPath      string                     // A directory using Docker-like *.{crt,cert,key} files for connecting to a registry or a daemon
+        tlsVerify           commonFlag.OptionalBool    // Require HTTPS and verify certificates (for docker: and docker-daemon:)
+        noCreds             bool                       // Access the registry anonymously
+}
+
+// imageOptions collects CLI flags which are the same across subcommands, but may be different for each image
+// (e.g. may differ between the source and destination of a copy)
+type imageOptions struct {
+        dockerImageOptions
+        sharedBlobDir    string // A directory to use for OCI blobs, shared across repositories
+        dockerDaemonHost string // docker-daemon: host to connect to
+}
+
+// dockerImageFlags prepares a collection of docker-transport specific CLI flags
+// writing into imageOptions, and the managed imageOptions structure.
+func dockerImageFlags(global *GlobalOptions, shared *SharedImageOptions, deprecatedTLSVerify *DeprecatedTLSVerifyOption, flagPrefix, credsOptionAlias string) (pflag.FlagSet, *imageOptions) <span class="cov8" title="1">{
+        flags := imageOptions{
+                dockerImageOptions: dockerImageOptions{
+                        global:              global,
+                        shared:              shared,
+                        deprecatedTLSVerify: deprecatedTLSVerify,
+                },
+        }
+
+        fs := pflag.FlagSet{}
+        if flagPrefix != "" </span><span class="cov8" title="1">{
+                // the non-prefixed flag is handled by a shared flag.
+                fs.Var(commonFlag.NewOptionalStringValue(&amp;flags.authFilePath), flagPrefix+"authfile", "path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json")
+        }</span>
+        <span class="cov8" title="1">fs.Var(commonFlag.NewOptionalStringValue(&amp;flags.credsOption), flagPrefix+"creds", "Use `USERNAME[:PASSWORD]` for accessing the registry")
+        fs.Var(commonFlag.NewOptionalStringValue(&amp;flags.userName), flagPrefix+"username", "Username for accessing the registry")
+        fs.Var(commonFlag.NewOptionalStringValue(&amp;flags.password), flagPrefix+"password", "Password for accessing the registry")
+        if credsOptionAlias != "" </span><span class="cov8" title="1">{
+                // This is horribly ugly, but we need to support the old option forms of (skopeo copy) for compatibility.
+                // Don't add any more cases like this.
+                f := fs.VarPF(commonFlag.NewOptionalStringValue(&amp;flags.credsOption), credsOptionAlias, "", "Use `USERNAME[:PASSWORD]` for accessing the registry")
+                f.Hidden = true
+        }</span>
+        <span class="cov8" title="1">fs.Var(commonFlag.NewOptionalStringValue(&amp;flags.registryToken), flagPrefix+"registry-token", "Provide a Bearer token for accessing the registry")
+        fs.StringVar(&amp;flags.dockerCertPath, flagPrefix+"cert-dir", "", "use certificates at `PATH` (*.crt, *.cert, *.key) to connect to the registry or daemon")
+        commonFlag.OptionalBoolFlag(&amp;fs, &amp;flags.tlsVerify, flagPrefix+"tls-verify", "require HTTPS and verify certificates when talking to the container registry or daemon")
+        fs.BoolVar(&amp;flags.noCreds, flagPrefix+"no-creds", false, "Access the registry anonymously")
+        return fs, &amp;flags</span>
+}
+
+// imageFlags prepares a collection of CLI flags writing into imageOptions, and the managed imageOptions structure.
+func ImageFlags(global *GlobalOptions, shared *SharedImageOptions, deprecatedTLSVerify *DeprecatedTLSVerifyOption, flagPrefix, credsOptionAlias string) (pflag.FlagSet, *imageOptions) <span class="cov8" title="1">{
+        dockerFlags, opts := dockerImageFlags(global, shared, deprecatedTLSVerify, flagPrefix, credsOptionAlias)
+
+        fs := pflag.FlagSet{}
+        fs.StringVar(&amp;opts.sharedBlobDir, flagPrefix+"shared-blob-dir", "", "`DIRECTORY` to use to share blobs across OCI repositories")
+        fs.StringVar(&amp;opts.dockerDaemonHost, flagPrefix+"daemon-host", "", "use docker daemon host at `HOST` (docker-daemon: only)")
+        fs.AddFlagSet(&amp;dockerFlags)
+        return fs, opts
+}</span>
+
+func RetryFlags() (pflag.FlagSet, *retry.Options) <span class="cov8" title="1">{
+        opts := retry.Options{}
+        fs := pflag.FlagSet{}
+        fs.IntVar(&amp;opts.MaxRetry, "retry-times", 0, "the number of times to possibly retry")
+        return fs, &amp;opts
+}</span>
+
+// getPolicyContext returns a *signature.PolicyContext based on opts.
+func (opts *GlobalOptions) GetPolicyContext() (*signature.PolicyContext, error) <span class="cov8" title="1">{
+        var policy *signature.Policy // This could be cached across calls in opts.
+        var err error
+        if opts.InsecurePolicy </span><span class="cov8" title="1">{
+                policy = &amp;signature.Policy{Default: []signature.PolicyRequirement{signature.NewPRInsecureAcceptAnything()}}
+        }</span> else<span class="cov0" title="0"> if opts.PolicyPath == "" </span><span class="cov0" title="0">{
+                policy, err = signature.DefaultPolicy(nil)
+        }</span> else<span class="cov0" title="0"> {
+                policy, err = signature.NewPolicyFromFile(opts.PolicyPath)
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return signature.NewPolicyContext(policy)</span>
+}
+
+// commandTimeoutContext returns a context.Context and a cancellation callback based on opts.
+// The caller should usually "defer cancel()" immediately after calling this.
+func (opts *GlobalOptions) CommandTimeoutContext() (context.Context, context.CancelFunc) <span class="cov8" title="1">{
+        ctx := context.Background()
+        var cancel context.CancelFunc = func() </span>{<span class="cov8" title="1">
+                // empty function - its ok for now
+        }</span>
+        <span class="cov8" title="1">if opts.CommandTimeout &gt; 0 </span><span class="cov0" title="0">{
+                ctx, cancel = context.WithTimeout(ctx, opts.CommandTimeout)
+        }</span>
+        <span class="cov8" title="1">return ctx, cancel</span>
+}
+
+// newSystemContext returns a *types.SystemContext corresponding to opts.
+// It is guaranteed to return a fresh instance, so it is safe to make additional updates to it.
+func (opts *GlobalOptions) NewSystemContext() *types.SystemContext <span class="cov8" title="1">{
+        ctx := &amp;types.SystemContext{
+                RegistriesDirPath:        opts.RegistriesDirPath,
+                ArchitectureChoice:       opts.OverrideArch,
+                OSChoice:                 opts.OverrideOS,
+                VariantChoice:            opts.OverrideVariant,
+                SystemRegistriesConfPath: opts.RegistriesConfPath,
+                BigFilesTemporaryDir:     opts.TmpDir,
+                DockerRegistryUserAgent:  defaultUserAgent,
+        }
+        // DEPRECATED: We support this for backward compatibility, but override it if a per-image flag is provided.
+        if !opts.TlsVerify </span><span class="cov8" title="1">{
+                ctx.DockerInsecureSkipTLSVerify = types.NewOptionalBool(true)
+        }</span>
+        <span class="cov8" title="1">return ctx</span>
+}
+
+// newSystemContext returns a *types.SystemContext corresponding to opts.
+// It is guaranteed to return a fresh instance, so it is safe to make additional updates to it.
+func (opts *imageOptions) NewSystemContext() (*types.SystemContext, error) <span class="cov8" title="1">{
+        // *types.SystemContext instance from globalOptions
+        //  imageOptions option overrides the instance if both are present.
+        ctx := opts.global.NewSystemContext()
+        ctx.DockerCertPath = opts.dockerCertPath
+        ctx.OCISharedBlobDirPath = opts.sharedBlobDir
+        ctx.AuthFilePath = opts.shared.authFilePath
+        ctx.DockerDaemonHost = opts.dockerDaemonHost
+        ctx.DockerDaemonCertPath = opts.dockerCertPath
+        if opts.dockerImageOptions.authFilePath.Present() </span><span class="cov0" title="0">{
+                ctx.AuthFilePath = opts.dockerImageOptions.authFilePath.Value()
+        }</span>
+        <span class="cov8" title="1">if opts.deprecatedTLSVerify != nil &amp;&amp; opts.deprecatedTLSVerify.tlsVerify.Present() </span><span class="cov0" title="0">{
+                // If both this deprecated option and a non-deprecated option is present, we use the latter value.
+                ctx.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!opts.deprecatedTLSVerify.tlsVerify.Value())
+        }</span>
+        <span class="cov8" title="1">if opts.tlsVerify.Present() </span><span class="cov0" title="0">{
+                ctx.DockerDaemonInsecureSkipTLSVerify = !opts.tlsVerify.Value()
+        }</span>
+        <span class="cov8" title="1">if opts.tlsVerify.Present() </span><span class="cov0" title="0">{
+                ctx.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!opts.tlsVerify.Value())
+        }</span>
+        <span class="cov8" title="1">if opts.credsOption.Present() &amp;&amp; opts.noCreds </span><span class="cov0" title="0">{
+                return nil, errors.New("creds and no-creds cannot be specified at the same time")
+        }</span>
+        <span class="cov8" title="1">if opts.userName.Present() &amp;&amp; opts.noCreds </span><span class="cov0" title="0">{
+                return nil, errors.New("username and no-creds cannot be specified at the same time")
+        }</span>
+        <span class="cov8" title="1">if opts.credsOption.Present() &amp;&amp; opts.userName.Present() </span><span class="cov0" title="0">{
+                return nil, errors.New("creds and username cannot be specified at the same time")
+        }</span>
+        // if any of username or password is present, then both are expected to be present
+        <span class="cov8" title="1">if opts.userName.Present() != opts.password.Present() </span><span class="cov0" title="0">{
+                if opts.userName.Present() </span><span class="cov0" title="0">{
+                        return nil, errors.New("password must be specified when username is specified")
+                }</span>
+                <span class="cov0" title="0">return nil, errors.New("username must be specified when password is specified")</span>
+        }
+        <span class="cov8" title="1">if opts.credsOption.Present() </span><span class="cov0" title="0">{
+                var err error
+                ctx.DockerAuthConfig, err = getDockerAuth(opts.credsOption.Value())
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+        } else<span class="cov8" title="1"> if opts.userName.Present() </span><span class="cov0" title="0">{
+                ctx.DockerAuthConfig = &amp;types.DockerAuthConfig{
+                        Username: opts.userName.Value(),
+                        Password: opts.password.Value(),
+                }
+        }</span>
+        <span class="cov8" title="1">if opts.registryToken.Present() </span><span class="cov0" title="0">{
+                ctx.DockerBearerRegistryToken = opts.registryToken.Value()
+        }</span>
+        <span class="cov8" title="1">if opts.noCreds </span><span class="cov0" title="0">{
+                ctx.DockerAuthConfig = &amp;types.DockerAuthConfig{}
+        }</span>
+
+        <span class="cov8" title="1">return ctx, nil</span>
+}
+
+// imageDestOptions is a superset of imageOptions specialized for image destinations.
+type imageDestOptions struct {
+        *imageOptions
+        dirForceCompression         bool                   // Compress layers when saving to the dir: transport
+        dirForceDecompression       bool                   // Decompress layers when saving to the dir: transport
+        ociAcceptUncompressedLayers bool                   // Whether to accept uncompressed layers in the oci: transport
+        compressionFormat           string                 // Format to use for the compression
+        compressionLevel            commonFlag.OptionalInt // Level to use for the compression
+        precomputeDigests           bool                   // Precompute digests to dedup layers when saving to the docker: transport
+}
+
+// imageDestFlags prepares a collection of CLI flags writing into imageDestOptions, and the managed imageDestOptions structure.
+func ImageDestFlags(global *GlobalOptions, shared *SharedImageOptions, deprecatedTLSVerify *DeprecatedTLSVerifyOption, flagPrefix, credsOptionAlias string) (pflag.FlagSet, *imageDestOptions) <span class="cov8" title="1">{
+        genericFlags, genericOptions := ImageFlags(global, shared, deprecatedTLSVerify, flagPrefix, credsOptionAlias)
+        opts := imageDestOptions{imageOptions: genericOptions}
+        fs := pflag.FlagSet{}
+        fs.AddFlagSet(&amp;genericFlags)
+        fs.BoolVar(&amp;opts.dirForceCompression, flagPrefix+"compress", false, "Compress tarball image layers when saving to directory using the 'dir' transport. (default is same compression type as source)")
+        fs.BoolVar(&amp;opts.dirForceDecompression, flagPrefix+"decompress", false, "Decompress tarball image layers when saving to directory using the 'dir' transport. (default is same compression type as source)")
+        fs.BoolVar(&amp;opts.ociAcceptUncompressedLayers, flagPrefix+"oci-accept-uncompressed-layers", false, "Allow uncompressed image layers when saving to an OCI image using the 'oci' transport. (default is to compress things that aren't compressed)")
+        fs.StringVar(&amp;opts.compressionFormat, flagPrefix+"compress-format", "", "`FORMAT` to use for the compression")
+        fs.Var(commonFlag.NewOptionalIntValue(&amp;opts.compressionLevel), flagPrefix+"compress-level", "`LEVEL` to use for the compression")
+        fs.BoolVar(&amp;opts.precomputeDigests, flagPrefix+"precompute-digests", false, "Precompute digests to prevent uploading layers already on the registry using the 'docker' transport.")
+        return fs, &amp;opts
+}</span>
+
+/*
+// newSystemContext returns a *types.SystemContext corresponding to opts.
+// It is guaranteed to return a fresh instance, so it is safe to make additional updates to it.
+func (opts *imageDestOptions) newSystemContext() (*types.SystemContext, error) {
+        ctx, err := opts.imageOptions.NewSystemContext()
+        if err != nil {
+                return nil, err
+        }
+
+        ctx.DirForceCompress = opts.dirForceCompression
+        ctx.DirForceDecompress = opts.dirForceDecompression
+        ctx.OCIAcceptUncompressedLayers = opts.ociAcceptUncompressedLayers
+        if opts.compressionFormat != "" {
+                cf, err := compression.AlgorithmByName(opts.compressionFormat)
+                if err != nil {
+                        return nil, err
+                }
+                ctx.CompressionFormat = &amp;cf
+        }
+        if opts.compressionLevel.Present() {
+                value := opts.compressionLevel.Value()
+                ctx.CompressionLevel = &amp;value
+        }
+        ctx.DockerRegistryPushPrecomputeDigests = opts.precomputeDigests
+        return ctx, err
+}
+*/
+
+func parseCreds(creds string) (string, string, error) <span class="cov0" title="0">{
+        if creds == "" </span><span class="cov0" title="0">{
+                return "", "", errors.New("credentials can't be empty")
+        }</span>
+        <span class="cov0" title="0">up := strings.SplitN(creds, ":", 2)
+        if len(up) == 1 </span><span class="cov0" title="0">{
+                return up[0], "", nil
+        }</span>
+        <span class="cov0" title="0">if up[0] == "" </span><span class="cov0" title="0">{
+                return "", "", errors.New("username can't be empty")
+        }</span>
+        <span class="cov0" title="0">return up[0], up[1], nil</span>
+}
+
+func getDockerAuth(creds string) (*types.DockerAuthConfig, error) <span class="cov0" title="0">{
+        username, password, err := parseCreds(creds)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return &amp;types.DockerAuthConfig{
+                Username: username,
+                Password: password,
+        }, nil</span>
+}
+
+/*
+// parseImageSource converts image URL-like string to an ImageSource.
+// The caller must call .Close() on the returned ImageSource.
+func parseImageSource(ctx context.Context, opts *imageOptions, name string) (types.ImageSource, error) {
+        ref, err := alltransports.ParseImageName(name)
+        if err != nil {
+                return nil, err
+        }
+        sys, err := opts.NewSystemContext()
+        if err != nil {
+                return nil, err
+        }
+        return ref.NewImageSource(ctx, sys)
+}
+*/
+
+// parseManifestFormat parses format parameter for copy and sync command.
+// It returns string value to use as manifest MIME type
+func ParseManifestFormat(manifestFormat string) (string, error) <span class="cov8" title="1">{
+        switch manifestFormat </span>{
+        case "oci":<span class="cov8" title="1">
+                return imgspecv1.MediaTypeImageManifest, nil</span>
+        case "v2s1":<span class="cov0" title="0">
+                return manifest.DockerV2Schema1SignedMediaType, nil</span>
+        case "v2s2":<span class="cov0" title="0">
+                return manifest.DockerV2Schema2MediaType, nil</span>
+        default:<span class="cov0" title="0">
+                return "", fmt.Errorf("unknown format %q. Choose one of the supported formats: 'oci', 'v2s1', or 'v2s2'", manifestFormat)</span>
+        }
+}
+
+/*
+// usageTemplate returns the usage template for skopeo commands
+// This blocks the displaying of the global options. The main skopeo
+// command should not use this.
+const usageTemplate = `Usage:{{if .Runnable}}
+{{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+{{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+Aliases:
+{{.NameAndAliases}}{{end}}{{if .HasExample}}
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}
+Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+{{end}}
+`
+*/
+
+/*
+// adjustUsage uses usageTemplate template to get rid the GlobalOption from usage
+// and disable [flag] at the end of command usage
+func adjustUsage(c *cobra.Command) {
+        c.SetUsageTemplate(usageTemplate)
+        c.DisableFlagsInUseLine = true
+}
+*/
+
+// promptForPassphrase interactively prompts for a passphrase related to privateKeyFile
+func PromptForPassphrase(privateKeyFile string, stdin, stdout *os.File) (string, error) <span class="cov0" title="0">{
+        stdinFd := int(stdin.Fd())
+        if !term.IsTerminal(stdinFd) </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("Cannot prompt for a passphrase for key %s, standard input is not a TTY", privateKeyFile)
+        }</span>
+
+        <span class="cov0" title="0">fmt.Fprintf(stdout, "Passphrase for key %s: ", privateKeyFile)
+        passphrase, err := term.ReadPassword(stdinFd)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("Error reading password: %w", err)
+        }</span>
+        <span class="cov0" title="0">fmt.Fprintf(stdout, "\n")
+        return string(passphrase), nil</span>
+}
+
+type GlobalOptions struct {
+        Debug              bool          // Enable debug output
+        TlsVerify          bool          // Require HTTPS and verify certificates (for docker: and docker-daemon:)
+        PolicyPath         string        // Path to a signature verification policy file
+        InsecurePolicy     bool          // Use an "allow everything" signature verification policy
+        RegistriesDirPath  string        // Path to a "registries.d" registry configuration directory
+        OverrideArch       string        // Architecture to use for choosing images, instead of the runtime one
+        OverrideOS         string        // OS to use for choosing images, instead of the runtime one
+        OverrideVariant    string        // Architecture variant to use for choosing images, instead of the runtime one
+        CommandTimeout     time.Duration // Timeout for the command execution
+        RegistriesConfPath string        // Path to the "registries.conf" file
+        TmpDir             string        // Path to use for big temporary files
+        ConfigPath         string        // Path to use for imagesetconfig
+}
+
+type CopyOptions struct {
+        Global                   *GlobalOptions
+        DeprecatedTLSVerify      *DeprecatedTLSVerifyOption
+        SrcImage                 *imageOptions
+        DestImage                *imageDestOptions
+        RetryOpts                *retry.Options
+        AdditionalTags           []string  // For docker-archive: destinations, in addition to the name:tag specified as destination, also add these
+        RemoveSignatures         bool      // Do not copy signatures from the source image
+        SignByFingerprint        string    // Sign the image using a GPG key with the specified fingerprint
+        SignBySigstorePrivateKey string    // Sign the image using a sigstore private key
+        SignPassphraseFile       string    // Path pointing to a passphrase file when signing (for either signature format, but only one of them)
+        SignIdentity             string    // Identity of the signed image, must be a fully specified docker reference
+        DigestFile               string    // Write digest to this file
+        Format                   string    // Force conversion of the image to a specified format
+        Quiet                    bool      // Suppress output information when copying images
+        All                      bool      // Copy all of the images if the source is a list
+        MultiArch                string    // How to handle multi architecture images
+        PreserveDigests          bool      // Preserve digests during copy
+        EncryptLayer             []int     // The list of layers to encrypt
+        EncryptionKeys           []string  // Keys needed to encrypt the image
+        DecryptionKeys           []string  // Keys needed to decrypt the image
+        Mode                     string    // 2 options disktoMirror or mirrorToDisk (for now)
+        Dev                      bool      // developer mode - will be removed when completed
+        Destination              string    // what to target to
+        UUID                     uuid.UUID // set uuid
+}
+
+/*
+func parseCatalogJson(data []byte) error {
+        var sch *v1alpha3.DeclarativeConfig
+        newJson := strings.NewReplacer(" ", "").Replace(string(data))
+        cmp := strings.Split(newJson, "}\n{")
+        var newCmp string
+        for x := range cmp {
+                switch {
+                case (x == 0):
+                        newCmp = cmp[x] + "}"
+                case (x &gt; 0) &amp;&amp; (x &lt; (len(cmp) - 1)):
+                        newCmp = "{" + cmp[x] + "}"
+                case (x == (len(cmp) - 1)):
+                        newCmp = "{" + cmp[x]
+                }
+                err := json.Unmarshal([]byte(newCmp), &amp;sch)
+                if err != nil {
+                        return err
+                }
+        }
+        return nil
+}
+*/
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package operator
 
 import (
         "bufio"
@@ -1047,7 +1886,7 @@ func cleanDuplicates(m map[string][]v1alpha3.RelatedImage) map[string]string <sp
 }
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">package release
+		<pre class="file" id="file10" style="display: none">package release
 
 import (
         "context"
@@ -1356,7 +2195,7 @@ func gatherUpdates(current, newest Update, updates []Update) downloads <span cla
 }
 </pre>
 		
-		<pre class="file" id="file8" style="display: none">package release
+		<pre class="file" id="file11" style="display: none">package release
 
 import (
         "crypto/tls"
@@ -1496,7 +2335,7 @@ func getTLSConfig() (*tls.Config, error) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file9" style="display: none">package release
+		<pre class="file" id="file12" style="display: none">package release
 
 import (
         "bufio"
@@ -1595,7 +2434,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.Relat
 }
 </pre>
 		
-		<pre class="file" id="file10" style="display: none">package release
+		<pre class="file" id="file13" style="display: none">package release
 
 import (
         "context"
@@ -2150,7 +2989,7 @@ func (e *edge) UnmarshalJSON(data []byte) error <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file11" style="display: none">package release
+		<pre class="file" id="file14" style="display: none">package release
 
 import (
         "errors"
@@ -2211,7 +3050,7 @@ func findReleases(channels []v1alpha2.ReleaseChannel, min bool) (map[string]semv
 }
 </pre>
 		
-		<pre class="file" id="file12" style="display: none">package services
+		<pre class="file" id="file15" style="display: none">package services
 
 import (
         "fmt"
@@ -2307,12 +3146,10 @@ func NewMirrorCmd() *cobra.Command <span class="cov8" title="1">{
         // just use the PluggableLoggerInterface
         // in the file pkg/log.go
         log := clog.New("debug")
-
         ex := &amp;ExecutorSchema{
                 Log:  log,
                 Opts: opts,
         }
-
         log.Info("executor schema %v ", ex)
 
         cmd := &amp;cobra.Command{
@@ -2320,24 +3157,36 @@ func NewMirrorCmd() *cobra.Command <span class="cov8" title="1">{
                         "%s &lt;destination type&gt;:&lt;destination location&gt;",
                         filepath.Base(os.Args[0]),
                 ),
-                Short:   "Manage mirrors per user configuration",
-                Long:    mirrorlongDesc,
-                Example: mirrorExamples,
-                //PersistentPreRun:  o.LogfilePreRun,
-                //PersistentPostRun: o.LogfilePostRun,
+                Short:         "Manage mirrors per user configuration",
+                Long:          mirrorlongDesc,
+                Example:       mirrorExamples,
                 Args:          cobra.MinimumNArgs(1),
                 SilenceErrors: false,
                 SilenceUsage:  false,
                 Run: func(cmd *cobra.Command, args []string) </span><span class="cov0" title="0">{
-                        //kcmdutil.CheckErr(o.Complete(cmd, args))
                         kcmdutil.CheckErr(ex.Validate(args))
                         kcmdutil.CheckErr(ex.Run(cmd, args))
                 }</span>,
         }
 
+        // bind the relevant flags
         <span class="cov8" title="1">o.BindFlags(cmd.Flags())
         opts.Global.ConfigPath = o.ConfigPath
 
+        // read the ImageSetConfiguration
+        cfg, err := config.ReadConfig(opts.Global.ConfigPath)
+        if err != nil </span><span class="cov8" title="1">{
+                log.Error("imagesetconfig %v ", err)
+        }</span>
+        <span class="cov8" title="1">log.Debug("imagesetconfig : %v", cfg)
+
+        // update all dependant modules
+        mc := mirror.NewMirrorCopy()
+        ex.Manifest = manifest.New(log)
+        ex.Mirror = mirror.New(mc)
+        ex.Config = cfg
+        ex.Operator = operator.New(log, cfg, opts, ex.Mirror, ex.Manifest)
+        ex.Batch = batch.New(log, cfg, opts, ex.Mirror, ex.Manifest)
         return cmd</span>
 }
 
@@ -2353,20 +3202,8 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span clas
 
         <span class="cov8" title="1">o.Log.Info("mode %s ", o.Opts.Mode)
 
-        // read the ImageSetConfiguration
-        cfg, err := config.ReadConfig(o.Opts.Global.ConfigPath)
-        if err != nil </span><span class="cov0" title="0">{
-                o.Log.Error("imagesetconfig %v ", err)
-        }</span>
-        <span class="cov8" title="1">o.Log.Debug("imagesetconfig : %v", cfg)
-
-        o.Config = cfg
-        //o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
-        //o.Mirror = mirror.New()
-        //o.Batch = batch.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
-
         // ensure working dir exists
-        err = os.MkdirAll("working-dir", 0755)
+        err := os.MkdirAll("working-dir", 0755)
         if err != nil </span><span class="cov0" title="0">{
                 o.Log.Error(" %v ", err)
                 return err
@@ -2375,7 +3212,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span clas
         <span class="cov8" title="1">var allRelatedImages []v1alpha3.RelatedImage
 
         // do releases
-        if len(cfg.Mirror.Platform.Channels) &gt; 0 </span><span class="cov8" title="1">{
+        if len(o.Config.Mirror.Platform.Channels) &gt; 0 </span><span class="cov8" title="1">{
                 // add these in the BatchWorker
                 // src := dockerProtocol + release.Spec.Tags[index].From.Name
                 // dest := strings.Split(release.Spec.Tags[index].From.Name, ":")[1]
@@ -2384,11 +3221,10 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span clas
                         return err
                 }</span>
                 <span class="cov8" title="1">o.Log.Info("total release images to copy %d ", len(allRelatedImages))</span>
-                //call the batch executioner
         }
 
         // do operators
-        <span class="cov8" title="1">if len(cfg.Mirror.Operators) &gt; 0 </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">if len(o.Config.Mirror.Operators) &gt; 0 </span><span class="cov8" title="1">{
                 allRelatedImages, err = o.Operator.OperatorImageCollector(cmd.Context())
                 if err != nil </span><span class="cov8" title="1">{
                         return err
@@ -2396,6 +3232,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span clas
                 <span class="cov8" title="1">o.Log.Info("total operator images to copy %d ", len(allRelatedImages))</span>
         }
 
+        //call the batch executioner
         <span class="cov8" title="1">err = o.Batch.Worker(cmd.Context(), allRelatedImages, o.Opts)
         if err != nil </span><span class="cov8" title="1">{
                 return err
@@ -2413,7 +3250,7 @@ func (o *ExecutorSchema) Validate(dest []string) error <span class="cov8" title=
 }
 </pre>
 		
-		<pre class="file" id="file13" style="display: none">package services
+		<pre class="file" id="file16" style="display: none">package services
 
 import (
         "github.com/spf13/pflag"

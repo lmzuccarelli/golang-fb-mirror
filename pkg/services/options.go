@@ -3,16 +3,15 @@ package services
 import (
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/klog/v2"
 )
 
 type RootOptions struct {
 	genericclioptions.IOStreams
 	Dir      string
 	LogLevel int
-	//logfileCleanup func()
 }
 
-/*
 func (o *RootOptions) BindFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&o.Dir, "dir", "d", "oc-mirror-workspace", "Assets directory")
 	fs.IntVarP(&o.LogLevel, "verbose", "v", o.LogLevel, "Number for the log level verbosity (valid 1-9, default is 0)")
@@ -20,32 +19,28 @@ func (o *RootOptions) BindFlags(fs *pflag.FlagSet) {
 		klog.Fatal(err.Error())
 	}
 }
-*/
 
 type MirrorOptions struct {
 	*RootOptions
-	OutputDir                  string
-	ConfigPath                 string
-	SkipImagePin               bool
-	ManifestsOnly              bool
-	From                       string
-	ToMirror                   string
-	UserNamespace              string
-	DryRun                     bool
-	SourceSkipTLS              bool
-	DestSkipTLS                bool
-	SourcePlainHTTP            bool
-	DestPlainHTTP              bool
-	SkipVerification           bool
-	SkipCleanup                bool
-	SkipMissing                bool
-	SkipMetadataCheck          bool
-	ContinueOnError            bool
-	IgnoreHistory              bool
-	MaxPerRegistry             int
-	UseOCIFeature              bool
-	OCIRegistriesConfig        string
-	OCIInsecureSignaturePolicy bool
+	OutputDir         string
+	ConfigPath        string
+	SkipImagePin      bool
+	ManifestsOnly     bool
+	From              string
+	ToMirror          string
+	UserNamespace     string
+	DryRun            bool
+	SourceSkipTLS     bool
+	DestSkipTLS       bool
+	SourcePlainHTTP   bool
+	DestPlainHTTP     bool
+	SkipVerification  bool
+	SkipCleanup       bool
+	SkipMissing       bool
+	SkipMetadataCheck bool
+	ContinueOnError   bool
+	IgnoreHistory     bool
+	MaxPerRegistry    int
 	// cancelCh is a channel listening for command cancellations
 	//cancelCh         <-chan struct{}
 	//once sync.Once
