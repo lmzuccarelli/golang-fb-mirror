@@ -462,6 +462,7 @@ type GlobalOptions struct {
 	RegistriesConfPath string        // Path to the "registries.conf" file
 	TmpDir             string        // Path to use for big temporary files
 	ConfigPath         string        // Path to use for imagesetconfig
+	From               string        // Used for mirroring (diskToMirror)
 }
 
 type CopyOptions struct {

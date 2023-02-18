@@ -1,6 +1,7 @@
 package mirror
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -23,7 +24,7 @@ const (
 
 // MirrorInterface  used to mirror images with container/images (skopeo)
 type MirrorInterface interface {
-	Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error)
+	Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout bufio.Writer) (retErr error)
 }
 
 type MirrorCopyInterface interface {
@@ -47,7 +48,7 @@ func NewMirrorCopy() MirrorCopyInterface {
 }
 
 // Run - method to copy images from source to destination
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
+func (o *Mirror) Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout bufio.Writer) (retErr error) {
 	return o.run(ctx, src, dest, opts, stdout)
 }
 
@@ -56,7 +57,7 @@ func (o *MirrorCopy) CopyImages(ctx context.Context, pc *signature.PolicyContext
 }
 
 // run - copy images setup and execute
-func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, stdout io.Writer) (retErr error) {
+func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, out bufio.Writer) (retErr error) {
 
 	opts.DeprecatedTLSVerify.WarnIfUsed([]string{"--src-tls-verify", "--dest-tls-verify"})
 
@@ -119,9 +120,9 @@ func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, s
 	ctx, cancel := opts.Global.CommandTimeoutContext()
 	defer cancel()
 
-	if opts.Quiet {
-		stdout = nil
-	}
+	//if opts.Quiet {
+	//	stdout = nil
+	//}
 
 	imageListSelection := copy.CopySystemImage
 	if len(opts.MultiArch) > 0 && opts.All {
@@ -203,6 +204,7 @@ func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, s
 	}
 
 	opts.DigestFile = "test-digest"
+	writer := io.Writer(&out)
 
 	co := &copy.Options{
 		RemoveSignatures:                 opts.RemoveSignatures,
@@ -211,7 +213,7 @@ func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, s
 		SignBySigstorePrivateKeyFile:     opts.SignBySigstorePrivateKey,
 		SignSigstorePrivateKeyPassphrase: []byte(passphrase),
 		SignIdentity:                     signIdentity,
-		ReportWriter:                     stdout,
+		ReportWriter:                     writer,
 		SourceCtx:                        sourceCtx,
 		DestinationCtx:                   destinationCtx,
 		ForceManifestMIMEType:            manifestType,
@@ -228,6 +230,7 @@ func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, s
 		if err != nil {
 			return err
 		}
+		out.Flush()
 		if opts.DigestFile != "" {
 			manifestDigest, err := manifest.Digest(manifestBytes)
 			if err != nil {

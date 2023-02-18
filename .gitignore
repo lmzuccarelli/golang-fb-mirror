@@ -4,3 +4,5 @@ commands.txt
 hold*
 lmz-test
 release-images
+logs/
+isc*.yaml

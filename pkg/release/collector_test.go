@@ -1,9 +1,9 @@
 package release
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/google/uuid"
@@ -242,7 +242,7 @@ type Cincinnati struct {
 	Fail   bool
 }
 
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, stdout io.Writer) error {
+func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, out bufio.Writer) error {
 	if o.Fail {
 		return fmt.Errorf("forced mirror run fail")
 	}

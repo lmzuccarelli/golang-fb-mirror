@@ -6,12 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
 	"github.com/google/uuid"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/batch"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
 	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
@@ -99,7 +97,7 @@ func NewMirrorCmd() *cobra.Command {
 		Log:  log,
 		Opts: opts,
 	}
-	log.Info("executor schema %v ", ex)
+	log.Debug("executor schema %v ", ex)
 
 	cmd := &cobra.Command{
 		Use: fmt.Sprintf(
@@ -113,15 +111,22 @@ func NewMirrorCmd() *cobra.Command {
 		SilenceErrors: false,
 		SilenceUsage:  false,
 		Run: func(cmd *cobra.Command, args []string) {
-			kcmdutil.CheckErr(ex.Validate(args))
-			kcmdutil.CheckErr(ex.Run(cmd, args))
+			ex.Complete(args)
+			err := ex.Validate(args)
+			if err != nil {
+				log.Error("%v ", err)
+				os.Exit(1)
+			}
+			err = ex.Run(cmd, args)
+			if err != nil {
+				log.Error("%v ", err)
+				os.Exit(1)
+			}
 		},
 	}
 
 	cmd.PersistentFlags().StringVar(&o.ConfigPath, "config", "isc.yaml", "Path to imageset configuration file")
 	opts.Global.ConfigPath = o.ConfigPath
-	// set t odev mode
-	opts.Dev = true
 	log.Debug("imagesetconfig file %s ", o.ConfigPath)
 	// read the ImageSetConfiguration
 	cfg, err := config.ReadConfig(opts.Global.ConfigPath)
@@ -129,75 +134,80 @@ func NewMirrorCmd() *cobra.Command {
 		log.Error("imagesetconfig %v ", err)
 	}
 	log.Debug("imagesetconfig : %v ", cfg)
+
 	// update all dependant modules
 	mc := mirror.NewMirrorCopy()
 	ex.Manifest = manifest.New(log)
 	ex.Mirror = mirror.New(mc)
 	ex.Config = cfg
-	ex.Operator = operator.New(log, cfg, opts, ex.Mirror, ex.Manifest)
 	ex.Batch = batch.New(log, ex.Mirror, ex.Manifest)
-	// TODO: error handling
-	client, _ := release.NewOCPClient(uuid.New())
-	cn := release.NewCincinnati(&cfg, &opts, client, false)
-	ex.Release = release.New(log, cfg, opts, ex.Mirror, ex.Manifest, cn)
-	ex.Operator = operator.New(log, cfg, opts, ex.Mirror, ex.Manifest)
+
 	return cmd
 }
 
 // Run - start the mirror functionality
 func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 
-	// logic to check mode
-	if strings.Contains(args[0], ociProtocol) {
-		o.Opts.Mode = mirrorToDisk
-	} else if strings.Contains(args[0], dockerProtocol) {
-		o.Opts.Mode = diskToMirror
-	}
-
-	o.Log.Info("mode %s ", o.Opts.Mode)
-	o.Opts.Destination = args[0]
-
+	// clean up logs directory
+	os.RemoveAll("logs/")
 	// ensure working dir exists
 	err := os.MkdirAll("working-dir", 0755)
 	if err != nil {
 		o.Log.Error(" %v ", err)
 		return err
 	}
+	// create logs directory
+	err = os.MkdirAll("logs", 0755)
+	if err != nil {
+		o.Log.Error(" %v ", err)
+		return err
+	}
 
-	var allRelatedImages []v1alpha3.RelatedImage
+	var allRelatedImages []string
 
 	// do releases
-	if len(o.Config.Mirror.Platform.Channels) > 0 {
-		// add these in the BatchWorker
-		// src := dockerProtocol + release.Spec.Tags[index].From.Name
-		// dest := strings.Split(release.Spec.Tags[index].From.Name, ":")[1]
-		ri, err := o.Release.ReleaseImageCollector(cmd.Context())
-		if err != nil {
-			return err
-		}
-		o.Log.Info("total release images to copy %d ", len(ri))
-		o.Opts.ImageType = "release"
-		allRelatedImages = mergeImages(allRelatedImages, ri)
+	imgs, err := o.Release.ReleaseImageCollector(cmd.Context())
+	if err != nil {
+		return err
 	}
+	o.Log.Info("total release images to copy %d ", len(imgs))
+	o.Opts.ImageType = "release"
+	allRelatedImages = mergeImages(allRelatedImages, imgs)
 
 	// do operators
-	if len(o.Config.Mirror.Operators) > 0 {
-		ri, err := o.Operator.OperatorImageCollector(cmd.Context())
-		if err != nil {
-			return err
-		}
-		o.Log.Info("total operator images to copy %d ", len(ri))
-		o.Opts.ImageType = "operator"
-		allRelatedImages = mergeImages(allRelatedImages, ri)
+	imgs, err = o.Operator.OperatorImageCollector(cmd.Context())
+	if err != nil {
+		return err
 	}
+	o.Log.Info("total operator images to copy %d ", len(imgs))
+	o.Opts.ImageType = "operator"
+	allRelatedImages = mergeImages(allRelatedImages, imgs)
 
-	//call the batch executioner
+	//call the batch worker
 	err = o.Batch.Worker(cmd.Context(), allRelatedImages, o.Opts)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// Complete - do the final setup of modules
+func (o *ExecutorSchema) Complete(args []string) {
+	// logic to check mode
+	if strings.Contains(args[0], ociProtocol) {
+		o.Opts.Mode = mirrorToDisk
+	} else if strings.Contains(args[0], dockerProtocol) {
+		o.Opts.Mode = diskToMirror
+	}
+	o.Opts.Dev = true
+	o.Log.Info("mode %s ", o.Opts.Mode)
+	o.Opts.Destination = args[0]
+	o.Opts.Global.From = "working-dir/test-lmz"
+	client, _ := release.NewOCPClient(uuid.New())
+	cn := release.NewCincinnati(o.Log, &o.Config, &o.Opts, client, false)
+	o.Release = release.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest, cn)
+	o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
 }
 
 // Validate - cobra validation
@@ -208,8 +218,9 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 	return fmt.Errorf("destination protocol must be either oci: or docker://")
 }
 
+// mergeImages - simple function to append releated images
 //nolint
-func mergeImages(base, in []v1alpha3.RelatedImage) []v1alpha3.RelatedImage {
+func mergeImages(base, in []string) []string {
 	for _, img := range in {
 		base = append(base, img)
 	}

@@ -1,8 +1,8 @@
 package operator
 
 import (
+	"bufio"
 	"context"
-	"io"
 	"testing"
 
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
@@ -160,7 +160,7 @@ type Manifest struct {
 	Log clog.PluggableLoggerInterface
 }
 
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, stdout io.Writer) error {
+func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, stdout bufio.Writer) error {
 	return nil
 }
 
@@ -219,8 +219,8 @@ func (o *Manifest) GetImageManifest(name string) (*v1alpha3.OCISchema, error) {
 func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[string][]v1alpha3.RelatedImage, error) {
 	relatedImages := make(map[string][]v1alpha3.RelatedImage)
 	relatedImages["abc"] = []v1alpha3.RelatedImage{
-		{Name: "testA", Image: "sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testB", Image: "sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+		{Name: "testA", Image: "quay.io/name/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+		{Name: "testB", Image: "quay.io/name/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
 	}
 	return relatedImages, nil
 }

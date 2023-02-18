@@ -1,8 +1,8 @@
 package batch
 
 import (
+	"bufio"
 	"context"
-	"io"
 	"testing"
 
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
@@ -29,26 +29,19 @@ func TestWorker(t *testing.T) {
 		RetryOpts:           retryOpts,
 		Destination:         "oci:test",
 		Dev:                 false,
-		Mode:                mirrorToDisk,
+		Mode:                "mirrorToDisk",
 	}
 
 	w := New(log, &Mirror{}, &Manifest{})
 
 	// this is a facade to get code coverage up
 	t.Run("Testing Worker : should pass", func(t *testing.T) {
-		relatedImages := []v1alpha3.RelatedImage{
-			{Name: "testA", Image: "registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testB", Image: "registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testC", Image: "registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testD", Image: "registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testE", Image: "registry/name/namespace/sometestimage-e@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testF", Image: "registry/name/namespace/sometestimage-f@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testG", Image: "registry/name/namespace/sometestimage-g@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testH", Image: "registry/name/namespace/sometestimage-h@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testI", Image: "registry/name/namespace/sometestimage-i@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testJ", Image: "registry/name/namespace/sometestimage-j@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testK", Image: "registry/name/namespace/sometestimage-k@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-			{Name: "testL", Image: "registry/name/namespace/sometestimage-l@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+		relatedImages := []string{
+			"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+			"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+			"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+			"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+			"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
 		}
 		err := w.Worker(context.Background(), relatedImages, opts)
 		if err != nil {
@@ -62,7 +55,7 @@ func TestWorker(t *testing.T) {
 type Mirror struct{}
 type Manifest struct{}
 
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, stdout io.Writer) (retErr error) {
+func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, out bufio.Writer) (retErr error) {
 	return nil
 }
 

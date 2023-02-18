@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
 	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
@@ -65,6 +64,7 @@ func TestExecutor(t *testing.T) {
 		res := &cobra.Command{}
 		res.SetContext(context.Background())
 		res.SilenceUsage = true
+		ex.Opts.Mode = "mirrorToDisk"
 		err := ex.Run(res, []string{"oci:test"})
 		if err != nil {
 			log.Error(" %v ", err)
@@ -87,6 +87,7 @@ func TestExecutor(t *testing.T) {
 		res := &cobra.Command{}
 		res.SilenceUsage = true
 		res.SetContext(context.Background())
+		ex.Opts.Mode = "mirrorToDisk"
 		err := ex.Run(res, []string{"docker://test"})
 		if err == nil {
 			t.Fatalf("should fail")
@@ -109,6 +110,7 @@ func TestExecutor(t *testing.T) {
 		res := &cobra.Command{}
 		res.SilenceUsage = true
 		res.SetContext(context.Background())
+		ex.Opts.Mode = "mirrorToDisk"
 		err := ex.Run(res, []string{"oci:test"})
 		if err == nil {
 			t.Fatalf("should fail")
@@ -131,6 +133,7 @@ func TestExecutor(t *testing.T) {
 		res := &cobra.Command{}
 		res.SilenceUsage = true
 		res.SetContext(context.Background())
+		ex.Opts.Mode = "mirrorToDisk"
 		err := ex.Run(res, []string{"oci:test"})
 		if err == nil {
 			t.Fatalf("should fail")
@@ -185,47 +188,37 @@ type Batch struct {
 	Fail   bool
 }
 
-func (o *Batch) Worker(ctx context.Context, images []v1alpha3.RelatedImage, opts mirror.CopyOptions) error {
+func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOptions) error {
 	if o.Fail {
 		return fmt.Errorf("forced error")
 	}
 	return nil
 }
 
-func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error) {
+func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error) {
 	if o.Fail {
-		return []v1alpha3.RelatedImage{}, fmt.Errorf("forced error operator collector")
+		return []string{}, fmt.Errorf("forced error operator collector")
 	}
-	test := []v1alpha3.RelatedImage{
-		{Name: "testA", Image: "sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testB", Image: "sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testC", Image: "sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testD", Image: "sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testE", Image: "sometestimage-e@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testF", Image: "sometestimage-f@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testG", Image: "sometestimage-g@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testH", Image: "sometestimage-h@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testI", Image: "sometestimage-i@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testJ", Image: "sometestimage-j@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+	test := []string{
+		"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
 	}
 	return test, nil
 }
 
-func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.RelatedImage, error) {
+func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error) {
 	if o.Fail {
-		return []v1alpha3.RelatedImage{}, fmt.Errorf("forced error release collector")
+		return []string{}, fmt.Errorf("forced error release collector")
 	}
-	test := []v1alpha3.RelatedImage{
-		{Name: "testA", Image: "sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testB", Image: "sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testC", Image: "sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testD", Image: "sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testE", Image: "sometestimage-e@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testF", Image: "sometestimage-f@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testG", Image: "sometestimage-g@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testH", Image: "sometestimage-h@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testI", Image: "sometestimage-i@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
-		{Name: "testJ", Image: "sometestimage-j@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea"},
+	test := []string{
+		"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
 	}
 	return test, nil
 }

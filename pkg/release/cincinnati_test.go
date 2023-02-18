@@ -79,7 +79,7 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 			t.Fatalf("should not fail endpoint parse")
 		}
 		c.url = endpoint
-		sch := NewCincinnati(&cfg, &opts, c, false)
+		sch := NewCincinnati(log, &cfg, &opts, c, false)
 		res := sch.GetReleaseReferenceImages(context.Background())
 
 		log.Debug("result from cincinnati %v", res)
@@ -104,7 +104,7 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 			t.Fatalf("should not fail endpoint parse")
 		}
 		c.url = endpoint
-		sch := NewCincinnati(&cfg, &opts, c, true)
+		sch := NewCincinnati(log, &cfg, &opts, c, true)
 		res := sch.GetReleaseReferenceImages(context.Background())
 
 		log.Debug("result from cincinnati %v", res)

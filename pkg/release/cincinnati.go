@@ -7,6 +7,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/google/uuid"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
+	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 )
 
@@ -16,11 +17,12 @@ type CincinnatiInterface interface {
 	NewOKDClient(uuid uuid.UUID) (Client, error)
 }
 
-func NewCincinnati(config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions, c Client, b bool) CincinnatiInterface {
-	return &CincinnatiSchema{Config: config, Opts: opts, Client: c, Fail: b}
+func NewCincinnati(log clog.PluggableLoggerInterface, config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions, c Client, b bool) CincinnatiInterface {
+	return &CincinnatiSchema{Log: log, Config: config, Opts: opts, Client: c, Fail: b}
 }
 
 type CincinnatiSchema struct {
+	Log    clog.PluggableLoggerInterface
 	Config *v1alpha2.ImageSetConfiguration
 	Opts   *mirror.CopyOptions
 	Client Client
@@ -85,7 +87,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 
 					// Update version to release channel
 					ch.MaxVersion = latest.String()
-					fmt.Printf("detected minimum version as %s", ch.MaxVersion)
+					o.Log.Info("detected minimum version as %s", ch.MaxVersion)
 					if len(ch.MinVersion) == 0 && ch.IsHeadsOnly() {
 						//min, found := prevChannels[ch.Name]
 						//if !found {
@@ -93,7 +95,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 						min := latest.String()
 						//}
 						ch.MinVersion = min
-						fmt.Printf("detected minimum version as %s\n", ch.MinVersion)
+						o.Log.Info("detected minimum version as %s\n", ch.MinVersion)
 					}
 				}
 
@@ -106,18 +108,18 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 						continue
 					}
 					ch.MinVersion = first.String()
-					fmt.Printf("detected minimum version as %s\n", ch.MinVersion)
+					o.Log.Info("detected minimum version as %s\n", ch.MinVersion)
 				}
 				versionsByChannel[ch.Name] = ch
 			} else {
 				// Range is set. Ensure full is true so this
 				// is skipped when processing release metadata.
-				fmt.Printf("processing minimum version %s and maximum version %s\n", ch.MinVersion, ch.MaxVersion)
+				o.Log.Info("processing minimum version %s and maximum version %s\n", ch.MinVersion, ch.MaxVersion)
 				ch.Full = true
 				versionsByChannel[ch.Name] = ch
 			}
 
-			downloads, err := getChannelDownloads(ctx, client, nil, ch, arch)
+			downloads, err := getChannelDownloads(ctx, o.Log, client, nil, ch, arch)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -140,7 +142,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 				errs = append(errs, err)
 				continue
 			}
-			newDownloads, err := getCrossChannelDownloads(ctx, client, arch, o.Config.Mirror.Platform.Channels)
+			newDownloads, err := getCrossChannelDownloads(ctx, o.Log, client, arch, o.Config.Mirror.Platform.Channels)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error calculating cross channel upgrades: %v", err))
 				continue
@@ -149,7 +151,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 		}
 	}
 	for _, e := range errs {
-		fmt.Println("error list ", e)
+		o.Log.Error("error list ", e)
 	}
 	return releaseDownloads
 }
@@ -160,7 +162,7 @@ func (d downloads) Merge(in downloads) {
 	for k, v := range in {
 		_, ok := d[k]
 		if ok {
-			fmt.Printf("download %s exists", k)
+			//fmt.Printf("download %s exists", k)
 			continue
 		}
 		d[k] = v
@@ -170,7 +172,7 @@ func (d downloads) Merge(in downloads) {
 //var b []byte
 
 // getDownloads will prepare the downloads map for mirroring
-func getChannelDownloads(ctx context.Context, c Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) {
+func getChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface, c Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) {
 	allDownloads := downloads{}
 
 	var prevChannel v1alpha2.ReleaseChannel
@@ -235,7 +237,7 @@ func getChannelDownloads(ctx context.Context, c Client, lastChannels []v1alpha2.
 		if err != nil {
 			return allDownloads, err
 		}
-		newDownloads = gatherUpdates(current, newest, updates)
+		newDownloads = gatherUpdates(log, current, newest, updates)
 
 	} else {
 		lowRange, err := semver.ParseRange(fmt.Sprintf(">=%s", first))
@@ -250,7 +252,7 @@ func getChannelDownloads(ctx context.Context, c Client, lastChannels []v1alpha2.
 		if err != nil {
 			return allDownloads, err
 		}
-		newDownloads = gatherUpdates(Update{}, Update{}, versions)
+		newDownloads = gatherUpdates(log, Update{}, Update{}, versions)
 	}
 	allDownloads.Merge(newDownloads)
 
@@ -258,7 +260,7 @@ func getChannelDownloads(ctx context.Context, c Client, lastChannels []v1alpha2.
 }
 
 // getCrossChannelDownloads will determine required downloads between channel versions (for OCP only)
-func getCrossChannelDownloads(ctx context.Context, ocpClient Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) {
+func getCrossChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface, ocpClient Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) {
 	// Strip any OKD channels from the list
 
 	var ocpChannels []v1alpha2.ReleaseChannel
@@ -284,13 +286,13 @@ func getCrossChannelDownloads(ctx context.Context, ocpClient Client, arch string
 	if err != nil {
 		return downloads{}, fmt.Errorf("failed to get upgrade graph: %v", err)
 	}
-	return gatherUpdates(current, newest, updates), nil
+	return gatherUpdates(log, current, newest, updates), nil
 }
 
-func gatherUpdates(current, newest Update, updates []Update) downloads {
+func gatherUpdates(log clog.PluggableLoggerInterface, current, newest Update, updates []Update) downloads {
 	releaseDownloads := downloads{}
 	for _, update := range updates {
-		fmt.Printf("Found update %s\n", update.Version)
+		log.Info("Found update %s\n", update.Version)
 		releaseDownloads[update.Image] = struct{}{}
 	}
 
