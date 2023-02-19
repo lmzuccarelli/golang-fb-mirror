@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/services"
+	cli "github.com/lmzuccarelli/golang-oci-mirror/pkg/cli"
 )
 
 func main() {
-	rootCmd := services.NewMirrorCmd()
+	rootCmd := cli.NewMirrorCmd()
 	err := rootCmd.Execute()
 	if err != nil {
 		fmt.Println("ERROR : ", err)

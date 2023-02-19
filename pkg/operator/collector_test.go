@@ -16,12 +16,14 @@ func TestOperatorImageCollector(t *testing.T) {
 
 	log := clog.New("trace")
 
-	global := &mirror.GlobalOptions{Debug: true, TlsVerify: false, InsecurePolicy: true}
+	global := &mirror.GlobalOptions{TlsVerify: false, InsecurePolicy: true}
+
 	_, sharedOpts := mirror.SharedImageFlags()
 	_, deprecatedTLSVerifyOpt := mirror.DeprecatedTLSVerifyFlags()
 	_, srcOpts := mirror.ImageFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "src-", "screds")
 	_, destOpts := mirror.ImageDestFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "dest-", "dcreds")
 	_, retryOpts := mirror.RetryFlags()
+
 	opts := mirror.CopyOptions{
 		Global:              global,
 		DeprecatedTLSVerify: deprecatedTLSVerifyOpt,

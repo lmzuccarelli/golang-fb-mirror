@@ -17,12 +17,9 @@ func TestExecutor(t *testing.T) {
 	log := clog.New("trace")
 
 	global := &mirror.GlobalOptions{
-		Debug:          true,
 		TlsVerify:      false,
 		InsecurePolicy: true,
-		ConfigPath:     "../../tests/isc.yaml",
 	}
-
 	_, sharedOpts := mirror.SharedImageFlags()
 	_, deprecatedTLSVerifyOpt := mirror.DeprecatedTLSVerifyFlags()
 	_, srcOpts := mirror.ImageFlags(global, sharedOpts, deprecatedTLSVerifyOpt, "src-", "screds")
@@ -35,7 +32,6 @@ func TestExecutor(t *testing.T) {
 		SrcImage:            srcOpts,
 		DestImage:           destOpts,
 		RetryOpts:           retryOpts,
-		Destination:         "oci:test",
 		Dev:                 false,
 		Mode:                mirrorToDisk,
 	}
@@ -148,6 +144,7 @@ func TestExecutor(t *testing.T) {
 		}
 		res := NewMirrorCmd()
 		res.SilenceUsage = true
+		ex.Opts.Global.ConfigPath = "hello"
 		err := ex.Validate([]string{"oci:test"})
 		if err != nil {
 			log.Error(" %v ", err)

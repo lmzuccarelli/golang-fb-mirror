@@ -450,7 +450,7 @@ func PromptForPassphrase(privateKeyFile string, stdin, stdout *os.File) (string,
 }
 
 type GlobalOptions struct {
-	Debug              bool          // Enable debug output
+	LogLevel           string        // one of info, debug, trace
 	TlsVerify          bool          // Require HTTPS and verify certificates (for docker: and docker-daemon:)
 	PolicyPath         string        // Path to a signature verification policy file
 	InsecurePolicy     bool          // Use an "allow everything" signature verification policy
@@ -461,8 +461,10 @@ type GlobalOptions struct {
 	CommandTimeout     time.Duration // Timeout for the command execution
 	RegistriesConfPath string        // Path to the "registries.conf" file
 	TmpDir             string        // Path to use for big temporary files
+	Dir                string        // working directory
 	ConfigPath         string        // Path to use for imagesetconfig
 	From               string        // Used for mirroring (diskToMirror)
+	Quiet              bool          // Suppress output information when copying images
 }
 
 type CopyOptions struct {
@@ -479,7 +481,6 @@ type CopyOptions struct {
 	SignIdentity             string    // Identity of the signed image, must be a fully specified docker reference
 	DigestFile               string    // Write digest to this file
 	Format                   string    // Force conversion of the image to a specified format
-	Quiet                    bool      // Suppress output information when copying images
 	All                      bool      // Copy all of the images if the source is a list
 	MultiArch                string    // How to handle multi architecture images
 	PreserveDigests          bool      // Preserve digests during copy
@@ -492,27 +493,3 @@ type CopyOptions struct {
 	UUID                     uuid.UUID // set uuid
 	ImageType                string    // release, catalog-operator, additionalImage
 }
-
-/*
-func parseCatalogJson(data []byte) error {
-	var sch *v1alpha3.DeclarativeConfig
-	newJson := strings.NewReplacer(" ", "").Replace(string(data))
-	cmp := strings.Split(newJson, "}\n{")
-	var newCmp string
-	for x := range cmp {
-		switch {
-		case (x == 0):
-			newCmp = cmp[x] + "}"
-		case (x > 0) && (x < (len(cmp) - 1)):
-			newCmp = "{" + cmp[x] + "}"
-		case (x == (len(cmp) - 1)):
-			newCmp = "{" + cmp[x]
-		}
-		err := json.Unmarshal([]byte(newCmp), &sch)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-*/

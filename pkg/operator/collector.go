@@ -242,7 +242,6 @@ func customImageParser(image string) (*v1alpha3.ImageRefSchema, error) {
 	var irs *v1alpha3.ImageRefSchema
 	var component string
 	parts := strings.Split(image, "/")
-	fmt.Println("DEBUG LMZ ", parts)
 	if len(parts) < 3 {
 		return irs, fmt.Errorf("[customImageParser] image url seems to be wrong %s ", image)
 	}

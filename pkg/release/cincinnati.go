@@ -182,45 +182,6 @@ func getChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface,
 		}
 	}
 	fmt.Println("previous channel ", prevChannel)
-	/*
-		if prevChannel.Name != "" {
-			// If the requested min version is less than the previous, add downloads
-			if prevChannel.MinVersion > channel.MinVersion {
-				first, err := semver.Parse(channel.MinVersion)
-				if err != nil {
-					return allDownloads, err
-				}
-				last, err := semver.Parse(prevChannel.MinVersion)
-				if err != nil {
-					return allDownloads, err
-				}
-				current, newest, updates, err := CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
-				if err != nil {
-					return allDownloads, err
-				}
-				newDownloads := gatherUpdates(current, newest, updates)
-				allDownloads.Merge(newDownloads)
-			}
-
-			// If the requested max version is more than the previous, add downloads
-			if prevChannel.MaxVersion < channel.MaxVersion {
-				first, err := semver.Parse(prevChannel.MaxVersion)
-				if err != nil {
-					return allDownloads, err
-				}
-				last, err := semver.Parse(channel.MinVersion)
-				if err != nil {
-					return allDownloads, err
-				}
-				current, newest, updates, err := CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
-				if err != nil {
-					return allDownloads, err
-				}
-				newDownloads := gatherUpdates(current, newest, updates)
-				allDownloads.Merge(newDownloads)
-			}
-		}
-	*/
 	// Plot between min and max of channel
 	first, err := semver.Parse(channel.MinVersion)
 	if err != nil {
@@ -289,6 +250,7 @@ func getCrossChannelDownloads(ctx context.Context, log clog.PluggableLoggerInter
 	return gatherUpdates(log, current, newest, updates), nil
 }
 
+// gatherUpdates
 func gatherUpdates(log clog.PluggableLoggerInterface, current, newest Update, updates []Update) downloads {
 	releaseDownloads := downloads{}
 	for _, update := range updates {

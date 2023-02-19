@@ -67,7 +67,6 @@ func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOpt
 	o.Log.Info("batch index %d ", b.BatchIndex)
 	o.Log.Info("batch size %d ", b.BatchSize)
 	o.Log.Info("remainder size %d ", b.Remainder)
-	o.Log.Info("image type %s ", opts.ImageType)
 
 	f := make([]*os.File, b.Count)
 	//f, err := make([]os.File)
@@ -115,13 +114,16 @@ func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOpt
 	if b.Remainder > 0 {
 		// one level of simple recursion
 		i := b.Count * BATCH_SIZE
-		o.Log.Info("executing remainder ")
+		o.Log.Info("executing remainder [batch size of 1]")
 		err := o.Worker(ctx, images[i:], opts)
 		if err != nil {
 			return err
 		}
 		// output the logs to console
-		consoleLogFromFile(o.Log)
+		if !opts.Global.Quiet {
+			consoleLogFromFile(o.Log)
+		}
+		o.Log.Info("[Worker] successfully completed all batches")
 	}
 	return nil
 }
@@ -140,6 +142,5 @@ func consoleLogFromFile(log clog.PluggableLoggerInterface) {
 				}
 			}
 		}
-		fmt.Println(" ")
 	}
 }
