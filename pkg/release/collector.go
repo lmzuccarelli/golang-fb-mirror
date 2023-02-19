@@ -21,7 +21,7 @@ const (
 	operatorImageExtractDir     string = "hold-operator"
 	workingDir                  string = "working-dir/"
 	dockerProtocol              string = "docker://"
-	ociProtocol                 string = "oci:"
+	ociProtocol                 string = "oci://"
 	releaseImageDir             string = "release-images"
 	operatorImageDir            string = "operator-images"
 	releaseImageExtractDir      string = "hold-release"
@@ -85,7 +85,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 				o.Log.Info("copying image %s ", key)
 				src := dockerProtocol + key
 				dest := ociProtocol + workingDir + releaseImageDir
-				err := o.Mirror.Run(ctx, src, dest, &o.Opts, *writer)
+				err := o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				if err != nil {
 					return []string{}, fmt.Errorf(errMsg, err)
 				}

@@ -465,6 +465,7 @@ type GlobalOptions struct {
 	ConfigPath         string        // Path to use for imagesetconfig
 	From               string        // Used for mirroring (diskToMirror)
 	Quiet              bool          // Suppress output information when copying images
+	Force              bool          // Force the copy/mirror even if there is nothing to update
 }
 
 type CopyOptions struct {

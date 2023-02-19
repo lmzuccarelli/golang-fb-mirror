@@ -23,7 +23,7 @@ const (
 	operatorImageExtractDir     string = "hold-operator"
 	workingDir                  string = "working-dir/"
 	dockerProtocol              string = "docker://"
-	ociProtocol                 string = "oci:"
+	ociProtocol                 string = "oci://"
 	releaseImageDir             string = "release-images"
 	operatorImageDir            string = "operator-images"
 	releaseImageExtractDir      string = "hold-release"
@@ -34,6 +34,7 @@ const (
 	diskToMirror                string = "diskToMirror"
 	mirrorToDisk                string = "mirrorToDisk"
 	errMsg                      string = "[OperatorImageCollector] %v "
+	logsFile                    string = "logs/operator.log"
 )
 
 type CollectorInterface interface {
@@ -68,7 +69,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 	relatedImages := make(map[string][]v1alpha3.RelatedImage)
 	label := "configs"
 	if !strings.Contains(o.Opts.Destination, ociProtocol) && !strings.Contains(o.Opts.Destination, dockerProtocol) {
-		return []string{}, fmt.Errorf(errMsg, "destination must use oci: or docker:// prefix")
+		return []string{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
 	}
 	dir := strings.Split(o.Opts.Destination, ":")[1]
 
@@ -86,7 +87,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 
 	// check the mode
 	if o.Opts.Mode == mirrorToDisk {
-		f, err := os.Create("logs/operators.log")
+		f, err := os.Create(logsFile)
 		if err != nil {
 			o.Log.Error(errMsg, err)
 		}
@@ -99,13 +100,13 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 				o.Log.Info("copying operator image %v", op.Catalog)
 				src := dockerProtocol + op.Catalog
 				dest := ociProtocol + workingDir + operatorImageDir
-				err := o.Mirror.Run(ctx, src, dest, &o.Opts, *writer)
+				err := o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				writer.Flush()
 				if err != nil {
 					o.Log.Error(errMsg, err)
 				}
 				// read the logs
-				f, _ := os.ReadFile("logs/operators.log")
+				f, _ := os.ReadFile(logsFile)
 				lines := strings.Split(string(f), "\n")
 				for _, s := range lines {
 					if len(s) > 0 {

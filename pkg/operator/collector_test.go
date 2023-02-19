@@ -30,7 +30,7 @@ func TestOperatorImageCollector(t *testing.T) {
 		SrcImage:            srcOpts,
 		DestImage:           destOpts,
 		RetryOpts:           retryOpts,
-		Destination:         "oci:test",
+		Destination:         "oci://test",
 		Dev:                 false,
 		Mode:                mirrorToDisk,
 	}
@@ -162,7 +162,7 @@ type Manifest struct {
 	Log clog.PluggableLoggerInterface
 }
 
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, stdout bufio.Writer) error {
+func (o *Mirror) Run(ctx context.Context, src, dest, mode string, opts *mirror.CopyOptions, stdout bufio.Writer) error {
 	return nil
 }
 

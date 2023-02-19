@@ -151,7 +151,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 		}
 	}
 	for _, e := range errs {
-		o.Log.Error("error list ", e)
+		o.Log.Error("error list %v ", e)
 	}
 	return releaseDownloads
 }
@@ -181,7 +181,7 @@ func getChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface,
 			prevChannel = ch
 		}
 	}
-	fmt.Println("previous channel ", prevChannel)
+	log.Trace("previous channel %v", prevChannel)
 	// Plot between min and max of channel
 	first, err := semver.Parse(channel.MinVersion)
 	if err != nil {

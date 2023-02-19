@@ -31,7 +31,7 @@ func TestReleaseImageCollector(t *testing.T) {
 		SrcImage:            srcOpts,
 		DestImage:           destOpts,
 		RetryOpts:           retryOpts,
-		Destination:         "oci:test",
+		Destination:         "oci://test",
 		Dev:                 false,
 		Mode:                mirrorToDisk,
 	}
@@ -117,23 +117,6 @@ func TestReleaseImageCollector(t *testing.T) {
 	}
 
 	cincinnati := &Cincinnati{Config: cfg, Opts: opts}
-
-	/*
-		olm := &v1alpha3.DeclarativeConfig{
-			Name:    "foo.v0.3.1",
-			Package: "foo",
-			RelatedImages: []v1alpha3.RelatedImage{
-				{
-					Name:  "operator",
-					Image: "quay.io/redhatgov/oc-mirror-dev@sha256:00aef3f7bd9bea8f627dbf46d2d062010ed7d8b208a98da389b701c3cae90026",
-				},
-			},
-			Properties: []property.Property{
-				property.MustBuildPackage("foo", "0.3.1"),
-			},
-			Entries: []v1alpha3.ChannelEntry{},
-		}
-	*/
 	ctx := context.Background()
 
 	// this test should cover over 80%
@@ -244,7 +227,7 @@ type Cincinnati struct {
 	Fail   bool
 }
 
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, out bufio.Writer) error {
+func (o *Mirror) Run(ctx context.Context, src, dest, mode string, opts *mirror.CopyOptions, out bufio.Writer) error {
 	if o.Fail {
 		return fmt.Errorf("forced mirror run fail")
 	}

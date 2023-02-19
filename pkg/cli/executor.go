@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"k8s.io/kubectl/pkg/util/templates"
 
 	"github.com/google/uuid"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/additional"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/batch"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
@@ -17,12 +19,13 @@ import (
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/operator"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/release"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/sequence"
 	"github.com/spf13/cobra"
 )
 
 const (
 	dockerProtocol  string = "docker://"
-	ociProtocol     string = "oci:"
+	ociProtocol     string = "oci://"
 	diskToMirror    string = "diskToMirror"
 	mirrorToDisk    string = "mirrorToDisk"
 	releaseImageDir string = "release-images"
@@ -39,44 +42,37 @@ var (
 		1. Destination prefix is docker:// - The current working directory will be used.
 		2. Destination prefix is oci:// - The destination directory specified will be used.
 
-
-
 		`,
 	)
 	mirrorExamples = templates.Examples(
 		`
 		# Mirror to a directory
-		oc-mirror --config mirror-config.yaml oci:mirror
-
+		oc-mirror oci:mirror --config mirror-config.yaml
 		`,
 	)
 )
 
 const (
-	logsDir    string = "logs/"
-	workingDir string = "working-dir"
+	logsDir          string = "logs/"
+	workingDir       string = "working-dir/"
+	additionalImages string = "additional-images"
 )
 
 type ExecutorSchema struct {
-	Log      clog.PluggableLoggerInterface
-	Config   v1alpha2.ImageSetConfiguration
-	Opts     mirror.CopyOptions
-	Operator operator.CollectorInterface
-	Release  release.CollectorInterface
-	Mirror   mirror.MirrorInterface
-	Manifest manifest.ManifestInterface
-	Batch    batch.BatchInterface
+	Log              clog.PluggableLoggerInterface
+	Config           v1alpha2.ImageSetConfiguration
+	MetaData         sequence.SequenceSchema
+	Opts             mirror.CopyOptions
+	Operator         operator.CollectorInterface
+	Release          release.CollectorInterface
+	AdditionalImages additional.CollectorInterface
+	Mirror           mirror.MirrorInterface
+	Manifest         manifest.ManifestInterface
+	Batch            batch.BatchInterface
 }
 
 // NewMirrorCmd - cobra entry point
-func NewMirrorCmd() *cobra.Command {
-
-	// setup pluggable logger
-	// feel free to plugin you own logger
-	// just use the PluggableLoggerInterface
-	// in the file pkg/log/logger.go
-
-	log := clog.New("info")
+func NewMirrorCmd(log clog.PluggableLoggerInterface) *cobra.Command {
 
 	global := &mirror.GlobalOptions{
 		TlsVerify:      false,
@@ -104,10 +100,8 @@ func NewMirrorCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use: fmt.Sprintf(
-			"%s <destination type>:<destination location>",
-			filepath.Base(os.Args[0]),
-		),
+		Use:           fmt.Sprintf("%v <destination type>:<destination location>", filepath.Base(os.Args[0])),
+		Version:       "v0.0.1",
 		Short:         "Manage mirrors per user configuration",
 		Long:          mirrorlongDesc,
 		Example:       mirrorExamples,
@@ -120,7 +114,9 @@ func NewMirrorCmd() *cobra.Command {
 				log.Error("%v ", err)
 				os.Exit(1)
 			}
+
 			ex.Complete(args)
+
 			err = ex.Run(cmd, args)
 			if err != nil {
 				log.Error("%v ", err)
@@ -134,6 +130,7 @@ func NewMirrorCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.Global.Dir, "dir", "working-dir", "Assets directory")
 	cmd.Flags().StringVar(&opts.Global.From, "from", "", "directory used when doing the oci: (mirrorToDisk) mode")
 	cmd.Flags().BoolVarP(&opts.Global.Quiet, "quiet", "q", false, "enable detailed logging when copying images")
+	cmd.Flags().BoolVarP(&opts.Global.Force, "force", "f", false, "force the copy and mirror functionality")
 	cmd.Flags().AddFlagSet(&flagSharedOpts)
 	cmd.Flags().AddFlagSet(&flagRetryOpts)
 	cmd.Flags().AddFlagSet(&flagDepTLS)
@@ -162,6 +159,22 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 
 	var allRelatedImages []string
 
+	// check if we need to copy or mirror
+	// check if there is a change if so then continue as normal else
+	// report that there is nothing to do (all up to date)
+	metadata, err := sequence.ReadMetaData(o.Opts.Global.Dir)
+	if err != nil {
+		o.Log.Error("%v", err)
+	}
+	_, res, err := sequence.CheckDiff(o.Opts.Global.Dir, metadata, o.Config)
+	if err != nil {
+		o.Log.Error("%v", err)
+	}
+	if !res && !o.Opts.Global.Force {
+		o.Log.Info("no change detected copy and mirror are up to date")
+		return nil
+	}
+
 	// do releases
 	imgs, err := o.Release.ReleaseImageCollector(cmd.Context())
 	if err != nil {
@@ -180,12 +193,27 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	o.Opts.ImageType = "operator"
 	allRelatedImages = mergeImages(allRelatedImages, imgs)
 
+	// do additionalImages
+	imgs, err = o.AdditionalImages.AdditionalImagesCollector(cmd.Context())
+	if err != nil {
+		return err
+	}
+	o.Log.Info("total additional images to copy %d ", len(imgs))
+	allRelatedImages = mergeImages(allRelatedImages, imgs)
+
 	//call the batch worker
 	err = o.Batch.Worker(cmd.Context(), allRelatedImages, o.Opts)
 	if err != nil {
 		return err
 	}
 
+	// only write if mode is diskToMirror
+	if o.Opts.Mode == diskToMirror {
+		err = sequence.WriteMetadata(o.Opts.Global.Dir, o.MetaData, o.Config)
+		if err != nil {
+			o.Log.Error("%v", err)
+		}
+	}
 	return nil
 }
 
@@ -200,25 +228,51 @@ func (o *ExecutorSchema) Complete(args []string) {
 		o.Log.Error("imagesetconfig %v ", err)
 	}
 	o.Log.Trace("imagesetconfig : %v ", cfg)
+
 	// update all dependant modules
 	mc := mirror.NewMirrorCopy()
+	md := mirror.NewMirrorDelete()
 	o.Manifest = manifest.New(o.Log)
-	o.Mirror = mirror.New(mc)
+	o.Mirror = mirror.New(mc, md)
 	o.Config = cfg
 	o.Batch = batch.New(o.Log, o.Mirror, o.Manifest)
 
 	// logic to check mode
+	var dest string
 	if strings.Contains(args[0], ociProtocol) {
 		o.Opts.Mode = mirrorToDisk
+		dest = "working-dir/" + strings.Trim(strings.Split(args[0], ":")[1], "/")
+		o.Log.Trace("destination %s ", dest)
 	} else if strings.Contains(args[0], dockerProtocol) {
 		o.Opts.Mode = diskToMirror
+		dest = o.Opts.Global.From
 	}
-	o.Log.Info("mode %s ", o.Opts.Mode)
 	o.Opts.Destination = args[0]
+	o.Opts.Global.Dir = dest
+	o.Log.Info("mode %s ", o.Opts.Mode)
+
+	metadata, err := sequence.ReadMetaData(dest)
+	if err != nil {
+		item := []sequence.Item{
+			{
+				Value:          0,
+				Current:        true,
+				Imagesetconfig: "",
+				Timestamp:      time.Now().Unix(),
+			},
+		}
+		seq := sequence.Sequence{Owner: "CFE-EMEA", Item: item}
+		metadata = sequence.SequenceSchema{Title: "golang-oci-mirror", Sequence: seq}
+		o.Log.Info("added new metadata %v ", metadata)
+	}
+	o.MetaData = metadata
+	o.Log.Info("metadata %v ", metadata)
+
 	client, _ := release.NewOCPClient(uuid.New())
 	cn := release.NewCincinnati(o.Log, &o.Config, &o.Opts, client, false)
 	o.Release = release.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest, cn)
 	o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
+	o.AdditionalImages = additional.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
 }
 
 // Validate - cobra validation
@@ -232,7 +286,7 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 	if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dockerProtocol) {
 		return nil
 	} else {
-		return fmt.Errorf("destination must have either oci: or docker:// protocol prefixes")
+		return fmt.Errorf("destination must have either oci:// or docker:// protocol prefixes")
 	}
 }
 

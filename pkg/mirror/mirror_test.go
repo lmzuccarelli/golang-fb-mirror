@@ -34,12 +34,13 @@ func TestMirror(t *testing.T) {
 		SignPassphraseFile:  "test-digest",
 	}
 
-	mm := &mockMirror{}
-	m := New(mm)
+	mm := &mockMirrorCopy{}
+	md := &mockMirrorDelete{}
+	m := New(mm, md)
 
 	writer := bufio.NewWriter(os.Stdout)
 	t.Run("Testing Worker : should pass", func(t *testing.T) {
-		err := m.Run(context.Background(), "docker://localhost.localdomain:5000/test", "oci:test", &opts, *writer)
+		err := m.Run(context.Background(), "docker://localhost.localdomain:5000/test", "oci:test", "copy", &opts, *writer)
 		if err != nil {
 			t.Fatal("should pass")
 		}
@@ -48,8 +49,13 @@ func TestMirror(t *testing.T) {
 
 // mock
 
-type mockMirror struct{}
+type mockMirrorCopy struct{}
+type mockMirrorDelete struct{}
 
-func (o *mockMirror) CopyImages(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, opts *copy.Options) ([]byte, error) {
+func (o *mockMirrorCopy) CopyImage(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, opts *copy.Options) ([]byte, error) {
 	return []byte("test"), nil
+}
+
+func (o *mockMirrorDelete) DeleteImage(ctx context.Context, dest string, opts *CopyOptions) error {
+	return nil
 }

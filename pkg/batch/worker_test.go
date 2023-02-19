@@ -57,7 +57,7 @@ func TestWorker(t *testing.T) {
 type Mirror struct{}
 type Manifest struct{}
 
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *mirror.CopyOptions, out bufio.Writer) (retErr error) {
+func (o *Mirror) Run(ctx context.Context, src, dest, mode string, opts *mirror.CopyOptions, out bufio.Writer) (retErr error) {
 	return nil
 }
 

@@ -20,44 +20,63 @@ import (
 
 const (
 	mirrorToDisk = "mirrorToDisk"
+	diskToMirror = "diskToMirror"
 )
 
 // MirrorInterface  used to mirror images with container/images (skopeo)
 type MirrorInterface interface {
-	Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout bufio.Writer) (retErr error)
+	Run(ctx context.Context, src, dest, mode string, opts *CopyOptions, stdout bufio.Writer) (retErr error)
 }
 
 type MirrorCopyInterface interface {
-	CopyImages(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, opts *copy.Options) ([]byte, error)
+	CopyImage(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, opts *copy.Options) ([]byte, error)
+}
+
+type MirrorDeleteInterface interface {
+	DeleteImage(ctx context.Context, image string, opts *CopyOptions) error
 }
 
 // Mirror
 type Mirror struct {
-	mc MirrorCopyInterface
+	mc   MirrorCopyInterface
+	md   MirrorDeleteInterface
+	Mode string
 }
 
 type MirrorCopy struct{}
+type MirrorDelete struct{}
 
 // New returns new Mirror instance
-func New(mc MirrorCopyInterface) MirrorInterface {
-	return &Mirror{mc: mc}
+func New(mc MirrorCopyInterface, md MirrorDeleteInterface) MirrorInterface {
+	return &Mirror{mc: mc, md: md}
 }
 
 func NewMirrorCopy() MirrorCopyInterface {
 	return &MirrorCopy{}
 }
 
-// Run - method to copy images from source to destination
-func (o *Mirror) Run(ctx context.Context, src, dest string, opts *CopyOptions, stdout bufio.Writer) (retErr error) {
-	return o.run(ctx, src, dest, opts, stdout)
+func NewMirrorDelete() MirrorDeleteInterface {
+	return &MirrorDelete{}
 }
 
-func (o *MirrorCopy) CopyImages(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, co *copy.Options) ([]byte, error) {
+// Run - method to copy images from source to destination
+func (o *Mirror) Run(ctx context.Context, src, dest, mode string, opts *CopyOptions, stdout bufio.Writer) (retErr error) {
+	if mode == "delete" {
+		return o.delete(ctx, src, opts)
+	}
+	return o.copy(ctx, src, dest, opts, stdout)
+}
+
+func (o *MirrorCopy) CopyImage(ctx context.Context, pc *signature.PolicyContext, destRef, srcRef types.ImageReference, co *copy.Options) ([]byte, error) {
 	return copy.Image(ctx, pc, destRef, srcRef, co)
 }
 
-// run - copy images setup and execute
-func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, out bufio.Writer) (retErr error) {
+func (o *MirrorDelete) DeleteImage(ctx context.Context, image string, co *CopyOptions) error {
+	return nil
+}
+
+// copy - copy images setup and execute
+func (o *Mirror) copy(ctx context.Context, src, dest string, opts *CopyOptions, out bufio.Writer) (retErr error) {
 
 	opts.DeprecatedTLSVerify.WarnIfUsed([]string{"--src-tls-verify", "--dest-tls-verify"})
 
@@ -226,7 +245,7 @@ func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, o
 
 	return retry.IfNecessary(ctx, func() error {
 		//manifestBytes, err := copy.Image(ctx, policyContext, destRef, srcRef, &copy.Options{
-		manifestBytes, err := o.mc.CopyImages(ctx, policyContext, destRef, srcRef, co)
+		manifestBytes, err := o.mc.CopyImage(ctx, policyContext, destRef, srcRef, co)
 		if err != nil {
 			return err
 		}
@@ -239,6 +258,35 @@ func (o *Mirror) run(ctx context.Context, src, dest string, opts *CopyOptions, o
 			if err = os.WriteFile(opts.DigestFile, []byte(manifestDigest.String()), 0644); err != nil {
 				return fmt.Errorf("Failed to write digest to file %q: %w", opts.DigestFile, err)
 			}
+		}
+		return nil
+	}, opts.RetryOpts)
+}
+
+// delete - delete images
+func (o *Mirror) delete(ctx context.Context, image string, opts *CopyOptions) error {
+
+	if err := ReexecIfNecessaryForImages([]string{image}...); err != nil {
+		return err
+	}
+
+	imageRef, err := alltransports.ParseImageName(image)
+	if err != nil {
+		return fmt.Errorf("Invalid source name %s: %v", image, err)
+	}
+
+	sysCtx, err := opts.DestImage.NewSystemContext()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := opts.Global.CommandTimeoutContext()
+	defer cancel()
+
+	return retry.IfNecessary(ctx, func() error {
+		err := imageRef.DeleteImage(ctx, sysCtx)
+		if err != nil {
+			return err
 		}
 		return nil
 	}, opts.RetryOpts)

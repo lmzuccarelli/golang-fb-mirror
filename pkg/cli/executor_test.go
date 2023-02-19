@@ -19,6 +19,7 @@ func TestExecutor(t *testing.T) {
 	global := &mirror.GlobalOptions{
 		TlsVerify:      false,
 		InsecurePolicy: true,
+		Force:          true,
 	}
 	_, sharedOpts := mirror.SharedImageFlags()
 	_, deprecatedTLSVerifyOpt := mirror.DeprecatedTLSVerifyFlags()
@@ -49,19 +50,20 @@ func TestExecutor(t *testing.T) {
 		collector := &Collector{Log: log, Config: cfg, Opts: opts, Fail: false}
 		batch := &Batch{Log: log, Config: cfg, Opts: opts}
 		ex := &ExecutorSchema{
-			Log:      log,
-			Config:   cfg,
-			Opts:     opts,
-			Operator: collector,
-			Release:  collector,
-			Batch:    batch,
+			Log:              log,
+			Config:           cfg,
+			Opts:             opts,
+			Operator:         collector,
+			Release:          collector,
+			AdditionalImages: collector,
+			Batch:            batch,
 		}
 
 		res := &cobra.Command{}
 		res.SetContext(context.Background())
 		res.SilenceUsage = true
 		ex.Opts.Mode = "mirrorToDisk"
-		err := ex.Run(res, []string{"oci:test"})
+		err := ex.Run(res, []string{"oci://test"})
 		if err != nil {
 			log.Error(" %v ", err)
 			t.Fatalf("should not fail")
@@ -72,12 +74,13 @@ func TestExecutor(t *testing.T) {
 		collector := &Collector{Log: log, Config: cfg, Opts: opts, Fail: false}
 		batch := &Batch{Log: log, Config: cfg, Opts: opts, Fail: true}
 		ex := &ExecutorSchema{
-			Log:      log,
-			Config:   cfg,
-			Opts:     opts,
-			Operator: collector,
-			Release:  collector,
-			Batch:    batch,
+			Log:              log,
+			Config:           cfg,
+			Opts:             opts,
+			Operator:         collector,
+			Release:          collector,
+			AdditionalImages: collector,
+			Batch:            batch,
 		}
 
 		res := &cobra.Command{}
@@ -95,19 +98,20 @@ func TestExecutor(t *testing.T) {
 		operatorCollector := &Collector{Log: log, Config: cfg, Opts: opts, Fail: false}
 		batch := &Batch{Log: log, Config: cfg, Opts: opts, Fail: false}
 		ex := &ExecutorSchema{
-			Log:      log,
-			Config:   cfg,
-			Opts:     opts,
-			Operator: operatorCollector,
-			Release:  releaseCollector,
-			Batch:    batch,
+			Log:              log,
+			Config:           cfg,
+			Opts:             opts,
+			Operator:         operatorCollector,
+			Release:          releaseCollector,
+			AdditionalImages: releaseCollector,
+			Batch:            batch,
 		}
 
 		res := &cobra.Command{}
 		res.SilenceUsage = true
 		res.SetContext(context.Background())
 		ex.Opts.Mode = "mirrorToDisk"
-		err := ex.Run(res, []string{"oci:test"})
+		err := ex.Run(res, []string{"oci://test"})
 		if err == nil {
 			t.Fatalf("should fail")
 		}
@@ -118,19 +122,20 @@ func TestExecutor(t *testing.T) {
 		operatorCollector := &Collector{Log: log, Config: cfg, Opts: opts, Fail: true}
 		batch := &Batch{Log: log, Config: cfg, Opts: opts, Fail: false}
 		ex := &ExecutorSchema{
-			Log:      log,
-			Config:   cfg,
-			Opts:     opts,
-			Operator: operatorCollector,
-			Release:  releaseCollector,
-			Batch:    batch,
+			Log:              log,
+			Config:           cfg,
+			Opts:             opts,
+			Operator:         operatorCollector,
+			Release:          releaseCollector,
+			AdditionalImages: releaseCollector,
+			Batch:            batch,
 		}
 
 		res := &cobra.Command{}
 		res.SilenceUsage = true
 		res.SetContext(context.Background())
 		ex.Opts.Mode = "mirrorToDisk"
-		err := ex.Run(res, []string{"oci:test"})
+		err := ex.Run(res, []string{"oci://test"})
 		if err == nil {
 			t.Fatalf("should fail")
 		}
@@ -142,10 +147,10 @@ func TestExecutor(t *testing.T) {
 			Config: cfg,
 			Opts:   opts,
 		}
-		res := NewMirrorCmd()
+		res := NewMirrorCmd(log)
 		res.SilenceUsage = true
 		ex.Opts.Global.ConfigPath = "hello"
-		err := ex.Validate([]string{"oci:test"})
+		err := ex.Validate([]string{"oci://test"})
 		if err != nil {
 			log.Error(" %v ", err)
 			t.Fatalf("should not fail")
@@ -158,7 +163,7 @@ func TestExecutor(t *testing.T) {
 			Config: cfg,
 			Opts:   opts,
 		}
-		res := NewMirrorCmd()
+		res := NewMirrorCmd(log)
 		res.SilenceUsage = true
 		err := ex.Validate([]string{"test"})
 		if err == nil {
@@ -207,6 +212,20 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 }
 
 func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error) {
+	if o.Fail {
+		return []string{}, fmt.Errorf("forced error release collector")
+	}
+	test := []string{
+		"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+	}
+	return test, nil
+}
+
+func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, error) {
 	if o.Fail {
 		return []string{}, fmt.Errorf("forced error release collector")
 	}

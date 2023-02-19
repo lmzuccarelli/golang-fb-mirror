@@ -89,7 +89,7 @@ func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOpt
 			o.Log.Debug("destination %s ", hld[1])
 			go func(ctx context.Context, src, dest string, opts *mirror.CopyOptions, writer bufio.Writer) {
 				defer wg.Done()
-				err := o.Mirror.Run(ctx, src, dest, opts, writer)
+				err := o.Mirror.Run(ctx, src, dest, "copy", opts, writer)
 				if err != nil {
 					errArray = append(errArray, err)
 				}
