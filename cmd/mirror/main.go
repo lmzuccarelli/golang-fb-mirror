@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	cli "github.com/lmzuccarelli/golang-oci-mirror/pkg/cli"
@@ -16,10 +15,11 @@ func main() {
 	// in the file pkg/log/logger.go
 
 	log := clog.New("info")
+
 	rootCmd := cli.NewMirrorCmd(log)
 	err := rootCmd.Execute()
 	if err != nil {
-		fmt.Println("ERROR : ", err)
+		log.Error("[Executor] %v ", err)
 		os.Exit(1)
 	}
 }

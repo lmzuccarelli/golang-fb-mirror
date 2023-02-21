@@ -14,12 +14,12 @@ import (
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/batch"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/diff"
 	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/operator"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/release"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/sequence"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +61,7 @@ const (
 type ExecutorSchema struct {
 	Log              clog.PluggableLoggerInterface
 	Config           v1alpha2.ImageSetConfiguration
-	MetaData         sequence.SequenceSchema
+	MetaData         diff.SequenceSchema
 	Opts             mirror.CopyOptions
 	Operator         operator.CollectorInterface
 	Release          release.CollectorInterface
@@ -69,6 +69,7 @@ type ExecutorSchema struct {
 	Mirror           mirror.MirrorInterface
 	Manifest         manifest.ManifestInterface
 	Batch            batch.BatchInterface
+	Diff             diff.DiffInterface
 }
 
 // NewMirrorCmd - cobra entry point
@@ -162,11 +163,11 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	// check if we need to copy or mirror
 	// check if there is a change if so then continue as normal else
 	// report that there is nothing to do (all up to date)
-	metadata, err := sequence.ReadMetaData(o.Opts.Global.Dir)
+	_, prevCfg, err := o.Diff.GetAllMetadata(o.Opts.Global.Dir)
 	if err != nil {
 		o.Log.Error("%v", err)
 	}
-	_, res, err := sequence.CheckDiff(o.Opts.Global.Dir, metadata, o.Config)
+	res, err := o.Diff.CheckDiff(prevCfg)
 	if err != nil {
 		o.Log.Error("%v", err)
 	}
@@ -207,12 +208,11 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// only write if mode is diskToMirror
-	if o.Opts.Mode == diskToMirror {
-		err = sequence.WriteMetadata(o.Opts.Global.Dir, o.MetaData, o.Config)
-		if err != nil {
-			o.Log.Error("%v", err)
-		}
+	// only execute if mode is diskToMirror
+
+	err = o.Diff.DeleteImages(cmd.Context())
+	if err != nil {
+		o.Log.Error("%v", err)
 	}
 	return nil
 }
@@ -251,19 +251,24 @@ func (o *ExecutorSchema) Complete(args []string) {
 	o.Opts.Global.Dir = dest
 	o.Log.Info("mode %s ", o.Opts.Mode)
 
-	metadata, err := sequence.ReadMetaData(dest)
+	metadata, _, err := o.Diff.GetAllMetadata(dest)
 	if err != nil {
-		item := []sequence.Item{
+		// if no previous imagesetconfig was found create new one
+		item := []diff.Item{
 			{
-				Value:          0,
-				Current:        true,
-				Imagesetconfig: "",
-				Timestamp:      time.Now().Unix(),
+				Value:       0,
+				Current:     true,
+				Timestamp:   time.Now().Unix(),
+				Destination: dest,
 			},
 		}
-		seq := sequence.Sequence{Owner: "CFE-EMEA", Item: item}
-		metadata = sequence.SequenceSchema{Title: "golang-oci-mirror", Sequence: seq}
+		seq := diff.Sequence{Item: item}
+		metadata = diff.SequenceSchema{Title: "golang-oci-mirror", Owner: "CFE-EAMA", Sequence: seq}
 		o.Log.Info("added new metadata %v ", metadata)
+		err := o.Diff.WriteMetadata(o.Opts.Global.Dir, dest, metadata, o.Config)
+		if err != nil {
+			o.Log.Error("%v", err)
+		}
 	}
 	o.MetaData = metadata
 	o.Log.Info("metadata %v ", metadata)
@@ -273,6 +278,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 	o.Release = release.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest, cn)
 	o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
 	o.AdditionalImages = additional.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
+	o.Diff = diff.New(o.Log, o.Config, o.Opts, o.Mirror)
 }
 
 // Validate - cobra validation

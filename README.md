@@ -19,8 +19,6 @@ All image formats are in OCI
 
 At this point in time the problems/lack of features are 
 - mirrorTomirror functionality (not yet tested)
-- no pruning
 - limited tests
-- incremental runs 
-- no diff and pruning from previous runs
+- detached api's - need to implement for upstream api changes
 
