@@ -15,11 +15,12 @@ import (
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
 	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
-	"gopkg.in/yaml.v2"
 )
 
 const (
 	metadataFile string = ".metadata.toml"
+	workingDir   string = "working-dir/"
+	errMsg       string = "[DeleteImages] "
 )
 
 type DiffInterface interface {
@@ -51,17 +52,17 @@ type DiffSchema struct {
 
 func (o *DiffCollector) DeleteImages(ctx context.Context) error {
 
-	metadata, prevCfg, err := o.GetAllMetadata(o.Opts.Global.Dir)
+	metadata, prevCfg, err := o.GetAllMetadata(workingDir + o.Opts.Global.Dir)
 	if err != nil {
-		return err
+		return fmt.Errorf(errMsg+"metadata %v ", err)
 	}
 
 	res, err := o.CheckDiff(prevCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf(errMsg+"check diff %v ", err)
 	}
 
-	if res {
+	if res && !o.Opts.Global.Force {
 		imgs, err := calculateDiff(prevCfg, o.Config)
 		if err != nil {
 			return err
@@ -80,11 +81,13 @@ func (o *DiffCollector) DeleteImages(ctx context.Context) error {
 				return err
 			}
 		}
+	} else {
+		o.Log.Info("[DeleteImages] no images found to delete")
+	}
 
-		err = o.WriteMetadata(o.Opts.Global.Dir, o.Opts.Destination, metadata, o.Config)
-		if err != nil {
-			return err
-		}
+	err = o.WriteMetadata(workingDir+o.Opts.Global.Dir, o.Opts.Destination, metadata, o.Config)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -144,16 +147,10 @@ func (o *DiffCollector) WriteMetadata(dir, dest string, sch SequenceSchema, cfg 
 		return err
 	}
 
-	// imagesetconfig
-	data, err := yaml.Marshal(&cfg)
-	if err != nil {
-		// failed to create/open the file
-		return err
-	}
+	data, err := os.ReadFile(o.Opts.Global.ConfigPath)
 	if err != nil {
 		return err
 	}
-
 	err = os.WriteFile(newItem.Imagesetconfig, data, 0644)
 	if err != nil {
 		return err

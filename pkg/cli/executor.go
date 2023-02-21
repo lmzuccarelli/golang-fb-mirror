@@ -53,9 +53,11 @@ var (
 )
 
 const (
-	logsDir          string = "logs/"
-	workingDir       string = "working-dir/"
-	additionalImages string = "additional-images"
+	logsDir                 string = "logs/"
+	workingDir              string = "working-dir/"
+	additionalImages        string = "additional-images"
+	releaseImageExtractDir  string = "hold-release"
+	operatorImageExtractDir string = "hold-operator"
 )
 
 type ExecutorSchema struct {
@@ -151,8 +153,23 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 		o.Log.Error(" %v ", err)
 		return err
 	}
+
 	// create logs directory
 	err = os.MkdirAll(logsDir, 0755)
+	if err != nil {
+		o.Log.Error(" %v ", err)
+		return err
+	}
+
+	// create release cache dir
+	err = os.MkdirAll(workingDir+"/"+releaseImageExtractDir, 0755)
+	if err != nil {
+		o.Log.Error(" %v ", err)
+		return err
+	}
+
+	// create operator cache dir
+	err = os.MkdirAll(workingDir+"/"+operatorImageExtractDir, 0755)
 	if err != nil {
 		o.Log.Error(" %v ", err)
 		return err
@@ -163,7 +180,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	// check if we need to copy or mirror
 	// check if there is a change if so then continue as normal else
 	// report that there is nothing to do (all up to date)
-	_, prevCfg, err := o.Diff.GetAllMetadata(o.Opts.Global.Dir)
+	_, prevCfg, err := o.Diff.GetAllMetadata(workingDir + o.Opts.Global.Dir)
 	if err != nil {
 		o.Log.Error("%v", err)
 	}
@@ -171,8 +188,15 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		o.Log.Error("%v", err)
 	}
+
+	// check if there has been a change in the imagesetconfig
+	// between a copy and mirror - it should not be changed
+	if o.Opts.Mode == diskToMirror && res && !o.Opts.Global.Force {
+		return fmt.Errorf("imagesetconfig should not be changed (from copy)")
+	}
+
 	if !res && !o.Opts.Global.Force {
-		o.Log.Info("no change detected copy and mirror are up to date")
+		o.Log.Info("no change detected for copy and mirror")
 		return nil
 	}
 
@@ -241,15 +265,23 @@ func (o *ExecutorSchema) Complete(args []string) {
 	var dest string
 	if strings.Contains(args[0], ociProtocol) {
 		o.Opts.Mode = mirrorToDisk
-		dest = "working-dir/" + strings.Trim(strings.Split(args[0], ":")[1], "/")
-		o.Log.Trace("destination %s ", dest)
+		dest = workingDir + strings.Trim(strings.Split(args[0], ":")[1], "/")
+		o.Log.Debug("destination %s ", dest)
 	} else if strings.Contains(args[0], dockerProtocol) {
 		o.Opts.Mode = diskToMirror
 		dest = o.Opts.Global.From
+		o.Log.Debug("destination %s ", dest)
 	}
 	o.Opts.Destination = args[0]
 	o.Opts.Global.Dir = dest
 	o.Log.Info("mode %s ", o.Opts.Mode)
+
+	client, _ := release.NewOCPClient(uuid.New())
+	cn := release.NewCincinnati(o.Log, &o.Config, &o.Opts, client, false)
+	o.Release = release.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest, cn)
+	o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
+	o.AdditionalImages = additional.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
+	o.Diff = diff.New(o.Log, o.Config, o.Opts, o.Mirror)
 
 	metadata, _, err := o.Diff.GetAllMetadata(dest)
 	if err != nil {
@@ -265,20 +297,13 @@ func (o *ExecutorSchema) Complete(args []string) {
 		seq := diff.Sequence{Item: item}
 		metadata = diff.SequenceSchema{Title: "golang-oci-mirror", Owner: "CFE-EAMA", Sequence: seq}
 		o.Log.Info("added new metadata %v ", metadata)
-		err := o.Diff.WriteMetadata(o.Opts.Global.Dir, dest, metadata, o.Config)
+		err := o.Diff.WriteMetadata(workingDir+o.Opts.Global.Dir, dest, metadata, o.Config)
 		if err != nil {
 			o.Log.Error("%v", err)
 		}
 	}
 	o.MetaData = metadata
 	o.Log.Info("metadata %v ", metadata)
-
-	client, _ := release.NewOCPClient(uuid.New())
-	cn := release.NewCincinnati(o.Log, &o.Config, &o.Opts, client, false)
-	o.Release = release.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest, cn)
-	o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
-	o.AdditionalImages = additional.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
-	o.Diff = diff.New(o.Log, o.Config, o.Opts, o.Mirror)
 }
 
 // Validate - cobra validation

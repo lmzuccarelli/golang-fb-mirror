@@ -20,7 +20,7 @@ const (
 	operatorImageExtractDir string = "hold-operator"
 	workingDir              string = "working-dir/"
 	dockerProtocol          string = "docker://"
-	ociProtocol             string = "oci:"
+	ociProtocol             string = "oci://"
 	additionalImagesDir     string = "additional-images"
 	blobsDir                string = "/blobs/sha256/"
 	diskToMirror            string = "diskToMirror"
@@ -81,17 +81,17 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, er
 		if e != nil {
 			o.Log.Error("%v", e)
 		}
-		e = filepath.Walk(o.Opts.Global.From+"/"+additionalImagesDir, func(path string, info os.FileInfo, err error) error {
+		e = filepath.Walk(workingDir+"/"+o.Opts.Global.From+"/"+additionalImagesDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {
 				ns := strings.Split(filepath.Dir(path), additionalImagesDir)
 				if len(ns) == 0 {
 					return fmt.Errorf(errMsg+"%s", "no directory found for additional-images ", path)
 				} else {
 					name := strings.Split(ns[1], "/")
-					if len(name) != 3 {
-						return fmt.Errorf(errMsg+"%s", "additional-images name and related compents are incorrect", name)
+					if len(name) != 2 {
+						return fmt.Errorf(errMsg+" %s ", "additional images name and related compents are incorrect", name)
 					}
-					src := ociProtocol + ns[0] + additionalImagesDir + "/" + name[1] + "/" + name[2]
+					src := strings.Trim(ociProtocol, "/") + ns[0] + additionalImagesDir + "/" + name[1]
 					dest := o.Opts.Destination + "/" + name[1]
 					allImages = append(allImages, src+"*"+dest)
 				}
