@@ -17,7 +17,11 @@ func TestReleaseImageCollector(t *testing.T) {
 
 	log := clog.New("trace")
 
-	global := &mirror.GlobalOptions{TlsVerify: false, InsecurePolicy: true}
+	global := &mirror.GlobalOptions{
+		TlsVerify:      false,
+		InsecurePolicy: true,
+		Dir:            "tests",
+	}
 
 	_, sharedOpts := mirror.SharedImageFlags()
 	_, deprecatedTLSVerifyOpt := mirror.DeprecatedTLSVerifyFlags()
@@ -301,7 +305,7 @@ func (o *Manifest) GetRelatedImagesFromCatalog(filePath, label string) (map[stri
 
 func (o *Manifest) ExtractLayersOCI(filePath, toPath, label string, oci *v1alpha3.OCISchema) error {
 	if o.FailExtract {
-		return fmt.Errorf("forced extarct oci fail")
+		return fmt.Errorf("forced extract oci fail")
 	}
 	return nil
 }
