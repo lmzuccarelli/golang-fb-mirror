@@ -72,7 +72,6 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 	if !strings.Contains(o.Opts.Destination, ociProtocol) && !strings.Contains(o.Opts.Destination, dockerProtocol) {
 		return []string{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
 	}
-	dir := strings.Split(o.Opts.Destination, "://")[1]
 
 	// compile a map to compare channels,min & max versions
 	for _, ops := range o.Config.Mirror.Operators {
@@ -100,7 +99,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 				// download the operator index image
 				o.Log.Info("copying operator image %v", op.Catalog)
 				src := dockerProtocol + op.Catalog
-				dest := ociProtocolTrimmed + workingDir + dir + "/" + operatorImageDir
+				dest := ociProtocolTrimmed + o.Opts.Global.Dir + "/" + operatorImageDir
 				err := o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				writer.Flush()
 				if err != nil {
@@ -116,7 +115,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 				}
 
 				// it's in oci format so we can go directly to the index.json file
-				oci, err := o.Manifest.GetImageIndex(workingDir + dir + "/" + operatorImageDir)
+				oci, err := o.Manifest.GetImageIndex(o.Opts.Global.Dir + "/" + operatorImageDir)
 				if err != nil {
 					return []string{}, err
 				}
@@ -133,14 +132,14 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 				o.Log.Info("manifest %v", manifest)
 
 				// read the operator image manifest
-				oci, err = o.Manifest.GetImageManifest(workingDir + dir + "/" + operatorImageDir + blobsDir + manifest)
+				oci, err = o.Manifest.GetImageManifest(o.Opts.Global.Dir + "/" + operatorImageDir + blobsDir + manifest)
 				if err != nil {
 					return []string{}, err
 				}
 
 				// read the config digest to get the detailed manifest
 				// looking for the lable to search for a specific folder
-				ocs, err := o.Manifest.GetOperatorConfig(workingDir + dir + "/" + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
+				ocs, err := o.Manifest.GetOperatorConfig(o.Opts.Global.Dir + "/" + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
 				if err != nil {
 					return []string{}, err
 				}
@@ -150,7 +149,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 
 				// untar all the blobs for the operator
 				// if the layer with "label (from previous step) is found to a specific folder"
-				err = o.Manifest.ExtractLayersOCI(workingDir+dir+"/"+operatorImageDir+blobsDir, workingDir+dir+"/"+operatorImageExtractDir, label, oci)
+				err = o.Manifest.ExtractLayersOCI(o.Opts.Global.Dir+"/"+operatorImageDir+blobsDir, o.Opts.Global.Dir+"/"+operatorImageExtractDir, label, oci)
 				if err != nil {
 					return []string{}, err
 				}
@@ -160,13 +159,13 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 			// this is the equivalent of the headOnly mode
 			// only the latest version of each operator will be selected
 			if len(op.Packages) == 0 {
-				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(workingDir+dir+"/"+operatorImageExtractDir, label)
+				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(o.Opts.Global.Dir+"/"+operatorImageExtractDir, label)
 				if err != nil {
 					return []string{}, err
 				}
 			} else {
 				// iterate through each package
-				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(workingDir+dir+"/"+operatorImageExtractDir, label, op, compare)
+				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(o.Opts.Global.Dir+"/"+operatorImageExtractDir, label, op, compare)
 				if err != nil {
 					return []string{}, err
 				}
@@ -189,7 +188,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 			o.Log.Debug("  image %s", k)
 			cleanedImages = append(cleanedImages, v1alpha3.RelatedImage{Name: v, Image: k})
 		}
-		allImages, err = batchWorkerConverter(o.Log, dir, cleanedImages)
+		allImages, err = batchWorkerConverter(o.Log, o.Opts.Global.Dir, cleanedImages)
 		if err != nil {
 			return []string{}, err
 		}
@@ -265,7 +264,7 @@ func batchWorkerConverter(log clog.PluggableLoggerInterface, dir string, images 
 			log.Error("[batchWorkerConverter] %v", err)
 			return result, err
 		}
-		err = os.MkdirAll(workingDir+dir+"/"+operatorImageDir+"/"+irs.Namespace, 0750)
+		err = os.MkdirAll(dir+"/"+operatorImageDir+"/"+irs.Namespace, 0750)
 		if err != nil {
 			log.Error("[batchWorkerConverter] %v", err)
 			return result, err
@@ -276,9 +275,9 @@ func batchWorkerConverter(log clog.PluggableLoggerInterface, dir string, images 
 			s := fmt.Sprintf("%d", timestamp)
 			img.Name = fmt.Sprintf("%x", sha256.Sum256([]byte(s)))[:6]
 		}
-		dest := ociProtocolTrimmed + workingDir + dir + "/" + operatorImageDir + "/" + irs.Namespace + "/" + img.Name
+		dest := ociProtocolTrimmed + dir + "/" + operatorImageDir + "/" + irs.Namespace + "/" + img.Name
 		log.Debug("source %s ", img.Image)
-		log.Debug("destination %s ", workingDir+dir+"/"+operatorImageDir+"/"+irs.Namespace+"/"+img.Name)
+		log.Debug("destination %s ", dir+"/"+operatorImageDir+"/"+irs.Namespace+"/"+img.Name)
 		result = append(result, src+"*"+dest)
 	}
 	return result, nil

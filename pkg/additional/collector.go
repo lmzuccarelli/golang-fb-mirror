@@ -58,9 +58,8 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, er
 
 	var allImages []string
 	if !strings.Contains(o.Opts.Destination, ociProtocol) && !strings.Contains(o.Opts.Destination, dockerProtocol) {
-		return []string{}, fmt.Errorf(errMsg, "destination must use oci: or docker:// prefix")
+		return []string{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
 	}
-	dir := strings.Split(o.Opts.Destination, "://")[1]
 
 	if o.Opts.Mode == mirrorToDisk {
 		for _, img := range o.Config.ImageSetConfigurationSpec.Mirror.AdditionalImages {
@@ -70,7 +69,7 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, er
 				return []string{}, nil
 			}
 			src := dockerProtocol + img.Name
-			dest := ociProtocolTrimmed + workingDir + dir + "/" + additionalImagesDir + "/" + irs.Component
+			dest := ociProtocolTrimmed + o.Opts.Global.Dir + "/" + additionalImagesDir + "/" + irs.Component
 			o.Log.Trace("source %s", src)
 			o.Log.Trace("destination %s", dest)
 			allImages = append(allImages, src+"*"+dest)

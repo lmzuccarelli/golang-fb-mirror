@@ -162,14 +162,16 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	}
 
 	// create release cache dir
-	err = os.MkdirAll(workingDir+o.Opts.Global.Dir+"/"+releaseImageExtractDir, 0755)
+	o.Log.Trace("creating release cache directory %s ", o.Opts.Global.Dir+"/"+releaseImageExtractDir)
+	err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageExtractDir, 0755)
 	if err != nil {
 		o.Log.Error(" %v ", err)
 		return err
 	}
 
 	// create operator cache dir
-	err = os.MkdirAll(workingDir+o.Opts.Global.Dir+"/"+operatorImageExtractDir, 0755)
+	o.Log.Trace("creating operator cache directory %s ", o.Opts.Global.Dir+"/"+operatorImageExtractDir)
+	err = os.MkdirAll(o.Opts.Global.Dir+"/"+operatorImageExtractDir, 0755)
 	if err != nil {
 		o.Log.Error(" %v ", err)
 		return err
@@ -264,7 +266,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 	var dest string
 	if strings.Contains(args[0], ociProtocol) {
 		o.Opts.Mode = mirrorToDisk
-		dest = workingDir + strings.Trim(strings.Split(args[0], ":")[1], "/")
+		dest = workingDir + strings.Split(args[0], ociProtocol)[1]
 		o.Log.Debug("destination %s ", dest)
 	} else if strings.Contains(args[0], dockerProtocol) {
 		o.Opts.Mode = diskToMirror
