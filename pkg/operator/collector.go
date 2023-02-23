@@ -24,6 +24,7 @@ const (
 	workingDir                  string = "working-dir/"
 	dockerProtocol              string = "docker://"
 	ociProtocol                 string = "oci://"
+	ociProtocolTrimmed          string = "oci:"
 	releaseImageDir             string = "release-images"
 	operatorImageDir            string = "operator-images"
 	releaseImageExtractDir      string = "hold-release"
@@ -71,7 +72,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 	if !strings.Contains(o.Opts.Destination, ociProtocol) && !strings.Contains(o.Opts.Destination, dockerProtocol) {
 		return []string{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
 	}
-	dir := strings.Split(o.Opts.Destination, ":")[1]
+	dir := strings.Split(o.Opts.Destination, "://")[1]
 
 	// compile a map to compare channels,min & max versions
 	for _, ops := range o.Config.Mirror.Operators {
@@ -99,7 +100,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 				// download the operator index image
 				o.Log.Info("copying operator image %v", op.Catalog)
 				src := dockerProtocol + op.Catalog
-				dest := ociProtocol + workingDir + operatorImageDir
+				dest := ociProtocolTrimmed + workingDir + dir + "/" + operatorImageDir
 				err := o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				writer.Flush()
 				if err != nil {
@@ -115,7 +116,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 				}
 
 				// it's in oci format so we can go directly to the index.json file
-				oci, err := o.Manifest.GetImageIndex(workingDir + operatorImageDir)
+				oci, err := o.Manifest.GetImageIndex(workingDir + dir + "/" + operatorImageDir)
 				if err != nil {
 					return []string{}, err
 				}
@@ -132,14 +133,14 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 				o.Log.Info("manifest %v", manifest)
 
 				// read the operator image manifest
-				oci, err = o.Manifest.GetImageManifest(workingDir + operatorImageDir + blobsDir + manifest)
+				oci, err = o.Manifest.GetImageManifest(workingDir + dir + "/" + operatorImageDir + blobsDir + manifest)
 				if err != nil {
 					return []string{}, err
 				}
 
 				// read the config digest to get the detailed manifest
 				// looking for the lable to search for a specific folder
-				ocs, err := o.Manifest.GetOperatorConfig(workingDir + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
+				ocs, err := o.Manifest.GetOperatorConfig(workingDir + dir + "/" + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
 				if err != nil {
 					return []string{}, err
 				}
@@ -149,7 +150,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 
 				// untar all the blobs for the operator
 				// if the layer with "label (from previous step) is found to a specific folder"
-				err = o.Manifest.ExtractLayersOCI(workingDir+operatorImageDir+blobsDir, workingDir+operatorImageExtractDir, label, oci)
+				err = o.Manifest.ExtractLayersOCI(workingDir+dir+"/"+operatorImageDir+blobsDir, workingDir+dir+"/"+operatorImageExtractDir, label, oci)
 				if err != nil {
 					return []string{}, err
 				}
@@ -159,13 +160,13 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 			// this is the equivalent of the headOnly mode
 			// only the latest version of each operator will be selected
 			if len(op.Packages) == 0 {
-				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(operatorImageExtractDir, label)
+				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(workingDir+dir+"/"+operatorImageExtractDir, label)
 				if err != nil {
 					return []string{}, err
 				}
 			} else {
 				// iterate through each package
-				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(operatorImageExtractDir, label, op, compare)
+				relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(workingDir+dir+"/"+operatorImageExtractDir, label, op, compare)
 				if err != nil {
 					return []string{}, err
 				}
@@ -213,7 +214,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 					if len(name) != 3 {
 						return fmt.Errorf(errMsg+"%s", "operator name and related compents are incorrect", name)
 					}
-					src := strings.Trim(ociProtocol, "/") + ns[0] + operatorImageDir + "/" + name[1] + "/" + name[2]
+					src := ociProtocolTrimmed + ns[0] + operatorImageDir + "/" + name[1] + "/" + name[2]
 					dest := o.Opts.Destination + "/" + name[1]
 					allImages = append(allImages, src+"*"+dest)
 				}
@@ -275,7 +276,7 @@ func batchWorkerConverter(log clog.PluggableLoggerInterface, dir string, images 
 			s := fmt.Sprintf("%d", timestamp)
 			img.Name = fmt.Sprintf("%x", sha256.Sum256([]byte(s)))[:6]
 		}
-		dest := ociProtocol + workingDir + dir + "/" + operatorImageDir + "/" + irs.Namespace + "/" + img.Name
+		dest := ociProtocolTrimmed + workingDir + dir + "/" + operatorImageDir + "/" + irs.Namespace + "/" + img.Name
 		log.Debug("source %s ", img.Image)
 		log.Debug("destination %s ", workingDir+dir+"/"+operatorImageDir+"/"+irs.Namespace+"/"+img.Name)
 		result = append(result, src+"*"+dest)

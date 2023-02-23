@@ -22,6 +22,7 @@ const (
 	workingDir                  string = "working-dir/"
 	dockerProtocol              string = "docker://"
 	ociProtocol                 string = "oci://"
+	ociProtocolTrimmed          string = "oci:"
 	releaseImageDir             string = "release-images"
 	operatorImageDir            string = "operator-images"
 	releaseImageExtractDir      string = "hold-release"
@@ -75,7 +76,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 		if !strings.Contains(o.Opts.Destination, ociProtocol) {
 			return []string{}, fmt.Errorf(" [ReleaseImageCollector] destination must use oci: or docker:// prefix")
 		}
-		dir := strings.Split(o.Opts.Destination, ":")[1]
+		dir := strings.Split(o.Opts.Destination, "://")[1]
 
 		writer := bufio.NewWriter(f)
 		defer f.Close()
@@ -84,7 +85,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 			for key := range releases {
 				o.Log.Info("copying image %s ", key)
 				src := dockerProtocol + key
-				dest := ociProtocol + workingDir + releaseImageDir
+				dest := ociProtocolTrimmed + workingDir + dir + "/" + releaseImageDir
 				err := o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				if err != nil {
 					return []string{}, fmt.Errorf(errMsg, err)
@@ -102,7 +103,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 			}
 		}
 
-		oci, err := o.Manifest.GetImageIndex(workingDir + releaseImageDir)
+		oci, err := o.Manifest.GetImageIndex(workingDir + dir + "/" + releaseImageDir)
 		if err != nil {
 			o.Log.Error("[ReleaseImageCollector] %v ", err)
 			return []string{}, fmt.Errorf(errMsg, err)
@@ -115,19 +116,19 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 		manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
 		o.Log.Debug("image index %v", manifest)
 
-		oci, err = o.Manifest.GetImageManifest(workingDir + releaseImageDir + blobsDir + manifest)
+		oci, err = o.Manifest.GetImageManifest(workingDir + dir + "/" + releaseImageDir + blobsDir + manifest)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
 		o.Log.Debug("manifest %v ", oci.Config.Digest)
 
-		err = o.Manifest.ExtractLayersOCI(workingDir+releaseImageDir+blobsDir, workingDir+releaseImageExtractDir, releaseManifests, oci)
+		err = o.Manifest.ExtractLayersOCI(workingDir+dir+"/"+releaseImageDir+blobsDir, workingDir+dir+"/"+releaseImageExtractDir, releaseManifests, oci)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
 		o.Log.Debug("extracted oci layer %s ", workingDir+releaseImageExtractDir)
 
-		allRelatedImages, err := o.Manifest.GetReleaseSchema(workingDir + releaseImageExtractFullPath)
+		allRelatedImages, err := o.Manifest.GetReleaseSchema(workingDir + dir + "/" + releaseImageExtractFullPath)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
@@ -155,7 +156,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 					if len(name) != 2 {
 						return fmt.Errorf(errMsg+" %s ", "operator name and related compents are incorrect", name)
 					}
-					src := strings.Trim(ociProtocol, "/") + ns[0] + releaseImageDir + "/" + name[1]
+					src := ociProtocolTrimmed + ns[0] + releaseImageDir + "/" + name[1]
 					dest := o.Opts.Destination + "/" + name[1]
 					allImages = append(allImages, src+"*"+dest)
 				}
@@ -176,7 +177,7 @@ func batcWorkerConverter(log clog.PluggableLoggerInterface, dir string, images [
 	var result []string
 	for _, img := range images {
 		src := dockerProtocol + img.Image
-		dest := ociProtocol + workingDir + dir + "/" + releaseImageDir + "/" + img.Name
+		dest := ociProtocolTrimmed + workingDir + dir + "/" + releaseImageDir + "/" + img.Name
 		err := os.MkdirAll(workingDir+dir+"/"+releaseImageDir+"/"+img.Name, 0750)
 		if err != nil {
 			log.Error("[batchWorkerConverter] %v", err)

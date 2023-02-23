@@ -52,7 +52,7 @@ type DiffSchema struct {
 
 func (o *DiffCollector) DeleteImages(ctx context.Context) error {
 
-	metadata, prevCfg, err := o.GetAllMetadata(workingDir + o.Opts.Global.Dir)
+	metadata, prevCfg, err := o.GetAllMetadata(o.Opts.Global.Dir)
 	if err != nil {
 		return fmt.Errorf(errMsg+"metadata %v ", err)
 	}
@@ -85,7 +85,7 @@ func (o *DiffCollector) DeleteImages(ctx context.Context) error {
 		o.Log.Info("[DeleteImages] no images found to delete")
 	}
 
-	err = o.WriteMetadata(workingDir+o.Opts.Global.Dir, o.Opts.Destination, metadata, o.Config)
+	err = o.WriteMetadata(o.Opts.Global.Dir, o.Opts.Destination, metadata, o.Config)
 	if err != nil {
 		return err
 	}

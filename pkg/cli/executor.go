@@ -162,14 +162,14 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	}
 
 	// create release cache dir
-	err = os.MkdirAll(workingDir+"/"+releaseImageExtractDir, 0755)
+	err = os.MkdirAll(workingDir+o.Opts.Global.Dir+"/"+releaseImageExtractDir, 0755)
 	if err != nil {
 		o.Log.Error(" %v ", err)
 		return err
 	}
 
 	// create operator cache dir
-	err = os.MkdirAll(workingDir+"/"+operatorImageExtractDir, 0755)
+	err = os.MkdirAll(workingDir+o.Opts.Global.Dir+"/"+operatorImageExtractDir, 0755)
 	if err != nil {
 		o.Log.Error(" %v ", err)
 		return err
@@ -180,7 +180,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	// check if we need to copy or mirror
 	// check if there is a change if so then continue as normal else
 	// report that there is nothing to do (all up to date)
-	_, prevCfg, err := o.Diff.GetAllMetadata(workingDir + o.Opts.Global.Dir)
+	_, prevCfg, err := o.Diff.GetAllMetadata(o.Opts.Global.Dir)
 	if err != nil {
 		o.Log.Error("%v", err)
 	}
@@ -233,7 +233,6 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	}
 
 	// only execute if mode is diskToMirror
-
 	err = o.Diff.DeleteImages(cmd.Context())
 	if err != nil {
 		o.Log.Error("%v", err)
@@ -297,7 +296,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 		seq := diff.Sequence{Item: item}
 		metadata = diff.SequenceSchema{Title: "golang-oci-mirror", Owner: "CFE-EAMA", Sequence: seq}
 		o.Log.Info("added new metadata %v ", metadata)
-		err := o.Diff.WriteMetadata(workingDir+o.Opts.Global.Dir, dest, metadata, o.Config)
+		err := o.Diff.WriteMetadata(o.Opts.Global.ConfigPath, dest, metadata, o.Config)
 		if err != nil {
 			o.Log.Error("%v", err)
 		}
@@ -322,7 +321,7 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 }
 
 // mergeImages - simple function to append releated images
-//nolint
+// nolint
 func mergeImages(base, in []string) []string {
 	for _, img := range in {
 		base = append(base, img)

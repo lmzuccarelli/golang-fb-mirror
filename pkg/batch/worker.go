@@ -48,6 +48,7 @@ type BatchSchema struct {
 	Remainder  int
 }
 
+// Worker - the main batch processor
 func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOptions) error {
 
 	var errArray []error
@@ -128,6 +129,7 @@ func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOpt
 	return nil
 }
 
+// consoleLogFromFile
 func consoleLogFromFile(log clog.PluggableLoggerInterface) {
 	dir, _ := os.ReadDir("logs")
 	for _, f := range dir {
