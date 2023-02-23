@@ -222,7 +222,7 @@ func (o *Mirror) copy(ctx context.Context, src, dest string, opts *CopyOptions, 
 		}
 	}
 
-	opts.DigestFile = "test-digest"
+	//opts.DigestFile = "test-digest"
 	writer := io.Writer(&out)
 
 	co := &copy.Options{

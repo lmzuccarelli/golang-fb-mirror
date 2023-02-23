@@ -177,7 +177,7 @@ func batcWorkerConverter(log clog.PluggableLoggerInterface, dir string, images [
 	for _, img := range images {
 		src := dockerProtocol + img.Image
 		dest := ociProtocolTrimmed + dir + "/" + releaseImageDir + "/" + img.Name
-		err := os.MkdirAll(workingDir+dir+"/"+releaseImageDir+"/"+img.Name, 0750)
+		err := os.MkdirAll(dir+"/"+releaseImageDir+"/"+img.Name, 0750)
 		if err != nil {
 			log.Error("[batchWorkerConverter] %v", err)
 			return []string{}, err
