@@ -23,9 +23,10 @@ const (
 	dockerProtocol              string = "docker://"
 	ociProtocol                 string = "oci://"
 	ociProtocolTrimmed          string = "oci:"
-	releaseImageDir             string = "release-images"
+	releaseImageDir             string = "/release-images"
+	releaseIndex                string = "/release-index"
 	operatorImageDir            string = "operator-images"
-	releaseImageExtractDir      string = "hold-release"
+	releaseImageExtractDir      string = "/hold-release"
 	releaseManifests            string = "release-manifests"
 	imageReferences             string = "image-references"
 	releaseImageExtractFullPath string = releaseImageExtractDir + "/" + releaseManifests + "/" + imageReferences
@@ -84,14 +85,14 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 			for key := range releases {
 				o.Log.Info("copying image %s ", key)
 				src := dockerProtocol + key
-				dest := ociProtocolTrimmed + o.Opts.Global.Dir + "/" + releaseImageDir
+				dest := ociProtocolTrimmed + o.Opts.Global.Dir + releaseImageDir + releaseIndex
 				err := o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				if err != nil {
 					return []string{}, fmt.Errorf(errMsg, err)
 				}
 				o.Log.Debug("copied release index image %s ", key)
 
-				// TODO: create common function read the logs
+				// TODO: create common function to show logs
 				f, _ := os.ReadFile(logFile)
 				lines := strings.Split(string(f), "\n")
 				for _, s := range lines {
@@ -102,7 +103,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 			}
 		}
 
-		oci, err := o.Manifest.GetImageIndex(o.Opts.Global.Dir + "/" + releaseImageDir)
+		oci, err := o.Manifest.GetImageIndex(o.Opts.Global.Dir + releaseImageDir + releaseIndex)
 		if err != nil {
 			o.Log.Error("[ReleaseImageCollector] %v ", err)
 			return []string{}, fmt.Errorf(errMsg, err)
@@ -115,25 +116,22 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 		manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
 		o.Log.Debug("image index %v", manifest)
 
-		oci, err = o.Manifest.GetImageManifest(o.Opts.Global.Dir + "/" + releaseImageDir + blobsDir + manifest)
+		oci, err = o.Manifest.GetImageManifest(o.Opts.Global.Dir + releaseImageDir + releaseIndex + blobsDir + manifest)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
 		o.Log.Debug("manifest %v ", oci.Config.Digest)
 
-		err = o.Manifest.ExtractLayersOCI(o.Opts.Global.Dir+"/"+releaseImageDir+blobsDir, o.Opts.Global.Dir+"/"+releaseImageExtractDir, releaseManifests, oci)
+		err = o.Manifest.ExtractLayersOCI(o.Opts.Global.Dir+releaseImageDir+releaseIndex+blobsDir, o.Opts.Global.Dir+releaseImageExtractDir, releaseManifests, oci)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
-		o.Log.Debug("extracted oci layer %s ", workingDir+releaseImageExtractDir)
+		o.Log.Debug("extracted oci layer %s ", o.Opts.Global.Dir+releaseImageExtractDir)
 
-		allRelatedImages, err := o.Manifest.GetReleaseSchema(o.Opts.Global.Dir + "/" + releaseImageExtractFullPath)
+		allRelatedImages, err := o.Manifest.GetReleaseSchema(o.Opts.Global.Dir + releaseImageExtractFullPath)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
-
-		// verify release signatures
-		o.Cincinnati.GenerateReleaseSignatures(ctx, releases)
 
 		allImages, err = batcWorkerConverter(o.Log, o.Opts.Global.Dir, allRelatedImages)
 		if err != nil {
@@ -150,12 +148,12 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 			o.Log.Error(errMsg, e)
 		}
 		// get all release images from manifest (json)
-		allRelatedImages, err := o.Manifest.GetReleaseSchema(o.Opts.Global.Dir + "/" + releaseImageExtractFullPath)
+		allRelatedImages, err := o.Manifest.GetReleaseSchema(o.Opts.Global.Dir + releaseImageExtractFullPath)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
 
-		e = filepath.Walk(o.Opts.Global.Dir+"/"+releaseImageDir, func(path string, info os.FileInfo, err error) error {
+		e = filepath.Walk(o.Opts.Global.Dir+releaseImageDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {
 				ns := strings.Split(filepath.Dir(path), releaseImageDir)
 				if len(ns) == 0 {
@@ -187,8 +185,8 @@ func batcWorkerConverter(log clog.PluggableLoggerInterface, dir string, images [
 	var result []string
 	for _, img := range images {
 		src := dockerProtocol + img.Image
-		dest := ociProtocolTrimmed + dir + "/" + releaseImageDir + "/" + img.Name
-		err := os.MkdirAll(dir+"/"+releaseImageDir+"/"+img.Name, 0750)
+		dest := ociProtocolTrimmed + dir + releaseImageDir + "/" + img.Name
+		err := os.MkdirAll(dir+releaseImageDir+"/"+img.Name, 0750)
 		if err != nil {
 			log.Error("[batchWorkerConverter] %v", err)
 			return []string{}, err

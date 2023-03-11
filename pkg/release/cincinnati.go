@@ -14,6 +14,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/google/uuid"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
 	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
 	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
 
@@ -29,10 +30,10 @@ const (
 )
 
 type CincinnatiInterface interface {
-	GetReleaseReferenceImages(ctx context.Context) map[string]struct{}
-	GenerateReleaseSignatures(ctx context.Context, imgs map[string]struct{})
-	NewOCPClient(uuid uuid.UUID) (Client, error)
-	NewOKDClient(uuid uuid.UUID) (Client, error)
+	GetReleaseReferenceImages(context.Context) map[string]struct{}
+	GenerateReleaseSignatures(context.Context, []v1alpha3.RelatedImage)
+	NewOCPClient(uuid.UUID) (Client, error)
+	NewOKDClient(uuid.UUID) (Client, error)
 }
 
 func NewCincinnati(log clog.PluggableLoggerInterface, config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions, c Client, b bool) CincinnatiInterface {
@@ -224,7 +225,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 		}
 	}
 
-	o.GenerateReleaseSignatures(ctx, releaseDownloads)
+	o.generateReleaseSignatures(ctx, releaseDownloads)
 
 	for _, e := range errs {
 		o.Log.Error("error list %v ", e)
@@ -342,7 +343,15 @@ func gatherUpdates(log clog.PluggableLoggerInterface, current, newest Update, up
 	return releaseDownloads
 }
 
-func (o *CincinnatiSchema) GenerateReleaseSignatures(ctx context.Context, rd map[string]struct{}) {
+func (o *CincinnatiSchema) GenerateReleaseSignatures(ctx context.Context, imgs []v1alpha3.RelatedImage) {
+	relatedDownloads := make(map[string]struct{})
+	for _, img := range imgs {
+		relatedDownloads[img.Image] = struct{}{}
+	}
+	o.generateReleaseSignatures(ctx, relatedDownloads)
+}
+
+func (o *CincinnatiSchema) generateReleaseSignatures(ctx context.Context, rd map[string]struct{}) {
 
 	var data []byte
 	var err error
@@ -359,9 +368,11 @@ func (o *CincinnatiSchema) GenerateReleaseSignatures(ctx context.Context, rd map
 		data, err = os.ReadFile(o.Opts.Global.Dir + SignatureDir + digest)
 		if err != nil {
 			if os.IsNotExist(err) {
-				o.Log.Warn("signature not in cache")
+				o.Log.Warn("signature for %s not in cache", digest)
 			}
 		}
+
+		o.Log.Info("signature found in cache %s", digest)
 
 		// we have the current digest in cache
 		if len(data) == 0 {
@@ -375,70 +386,74 @@ func (o *CincinnatiSchema) GenerateReleaseSignatures(ctx context.Context, rd map
 			defer resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				o.Log.Debug("response from signature lookup %d", resp.StatusCode)
-			}
 
-			data, err = io.ReadAll(resp.Body)
+				data, err = io.ReadAll(resp.Body)
+				if err != nil {
+					o.Log.Error("%v", err)
+				}
+			}
+		}
+
+		if len(data) > 0 {
+			keyring, err := openpgp.ReadArmoredKeyRing(bytes.NewReader([]byte(pk)))
+			//keyring, err := openpgp.ReadKeyRing(bytes.NewReader([]byte(data)))
 			if err != nil {
 				o.Log.Error("%v", err)
 			}
-		}
+			o.Log.Debug("Keyring %v", keyring)
 
-		keyring, err := openpgp.ReadArmoredKeyRing(bytes.NewReader([]byte(pk)))
-		//keyring, err := openpgp.ReadKeyRing(bytes.NewReader([]byte(data)))
-		if err != nil {
-			o.Log.Error("%v", err)
-		}
-		o.Log.Debug("Keyring %v", keyring)
-
-		md, err := openpgp.ReadMessage(bytes.NewReader(data), keyring, nil, nil)
-		if err != nil {
-			o.Log.Error("%v could not read the message:", err)
-		}
-		if !md.IsSigned {
-			o.Log.Error("not signed")
-		}
-		content, err := io.ReadAll(md.UnverifiedBody)
-		if err != nil {
-			o.Log.Error("%v", err)
-		}
-		if md.SignatureError != nil {
-			o.Log.Error("signature error:", md.SignatureError)
-		}
-		if md.SignedBy == nil {
-			o.Log.Error("invalid signature")
-		}
-
-		o.Log.Debug("field isEncrypted %v", md.IsEncrypted)
-		o.Log.Debug("field EencryptedToKeyIds %v", md.EncryptedToKeyIds)
-		o.Log.Debug("field IsSymmetricallyEncrypted %v", md.IsSymmetricallyEncrypted)
-		o.Log.Debug("field DecryptedWith %v", md.DecryptedWith)
-		o.Log.Debug("field IsSigned %v", md.IsSigned)
-		o.Log.Debug("field SignedByKeyId %v", md.SignedByKeyId)
-		o.Log.Debug("field SignedBy %v", md.SignedBy)
-		o.Log.Debug("field LiteralData %v", md.LiteralData)
-		o.Log.Debug("field SignatureError %v", md.SignatureError)
-		o.Log.Debug("field Signature %v", md.Signature)
-		o.Log.Debug("field SignatureV3 %v", md.SignatureV3.IssuerKeyId)
-		o.Log.Debug("field SignatureV3 %v", md.SignatureV3.CreationTime)
-
-		if md.Signature != nil {
-			if md.Signature.SigLifetimeSecs != nil {
-				expiry := md.Signature.CreationTime.Add(time.Duration(*md.Signature.SigLifetimeSecs) * time.Second)
-				if time.Now().After(expiry) {
-					o.Log.Debug("signature expired on %v ", expiry)
-				}
+			md, err := openpgp.ReadMessage(bytes.NewReader(data), keyring, nil, nil)
+			if err != nil {
+				o.Log.Error("%v could not read the message:", err)
 			}
-		} else if md.SignatureV3 == nil {
-			o.Log.Error("unexpected openpgp.MessageDetails: neither Signature nor SignatureV3 is set")
-		}
+			if !md.IsSigned {
+				o.Log.Error("not signed")
+			}
+			content, err := io.ReadAll(md.UnverifiedBody)
+			if err != nil {
+				o.Log.Error("%v", err)
+			}
+			if md.SignatureError != nil {
+				o.Log.Error("signature error:", md.SignatureError)
+			}
+			if md.SignedBy == nil {
+				o.Log.Error("invalid signature")
+			}
 
-		o.Log.Info("content %s", string(content))
-		o.Log.Info("public Key : %s", strings.ToUpper(fmt.Sprintf("%x", md.SignedBy.PublicKey.Fingerprint)))
+			o.Log.Trace("field isEncrypted %v", md.IsEncrypted)
+			o.Log.Trace("field EencryptedToKeyIds %v", md.EncryptedToKeyIds)
+			o.Log.Trace("field IsSymmetricallyEncrypted %v", md.IsSymmetricallyEncrypted)
+			o.Log.Trace("field DecryptedWith %v", md.DecryptedWith)
+			o.Log.Trace("field IsSigned %v", md.IsSigned)
+			o.Log.Trace("field SignedByKeyId %v", md.SignedByKeyId)
+			o.Log.Trace("field SignedBy %v", md.SignedBy)
+			o.Log.Trace("field LiteralData %v", md.LiteralData)
+			o.Log.Trace("field SignatureError %v", md.SignatureError)
+			o.Log.Trace("field Signature %v", md.Signature)
+			o.Log.Trace("field SignatureV3 %v", md.SignatureV3.IssuerKeyId)
+			o.Log.Trace("field SignatureV3 %v", md.SignatureV3.CreationTime)
 
-		// write signature to cache
-		ferr := os.WriteFile(o.Opts.Global.Dir+SignatureDir+digest, data, 0644)
-		if ferr != nil {
-			o.Log.Error("%v", ferr)
+			if md.Signature != nil {
+				if md.Signature.SigLifetimeSecs != nil {
+					expiry := md.Signature.CreationTime.Add(time.Duration(*md.Signature.SigLifetimeSecs) * time.Second)
+					if time.Now().After(expiry) {
+						o.Log.Debug("signature expired on %v ", expiry)
+					}
+				}
+			} else if md.SignatureV3 == nil {
+				o.Log.Error("unexpected openpgp.MessageDetails: neither Signature nor SignatureV3 is set")
+			}
+
+			o.Log.Info("content %s", string(content))
+			o.Log.Info("public Key : %s", strings.ToUpper(fmt.Sprintf("%x", md.SignedBy.PublicKey.Fingerprint)))
+
+			// write signature to cache
+			ferr := os.WriteFile(o.Opts.Global.Dir+SignatureDir+digest, data, 0644)
+			if ferr != nil {
+				o.Log.Error("%v", ferr)
+			}
+		} else {
+			o.Log.Warn("no signature found for %s", digest)
 		}
 	}
 }
