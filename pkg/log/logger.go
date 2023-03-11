@@ -13,6 +13,7 @@ type PluggableLoggerInterface interface {
 	Info(msg string, val ...interface{})
 	Debug(msg string, val ...interface{})
 	Trace(msg string, val ...interface{})
+	Warn(msg string, val ...interface{})
 	Level(levele string)
 }
 
@@ -44,6 +45,11 @@ func (c *PluggableLogger) Debug(msg string, val ...interface{}) {
 // Trace
 func (c *PluggableLogger) Trace(msg string, val ...interface{}) {
 	c.Log.Trace(fmt.Sprintf(msg, val...))
+}
+
+// Warn
+func (c *PluggableLogger) Warn(msg string, val ...interface{}) {
+	c.Log.Warn(fmt.Sprintf(msg, val...))
 }
 
 // Level - ovveride log level

@@ -131,6 +131,10 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
 		}
+
+		// verify release signatures
+		o.Cincinnati.GenerateReleaseSignatures(ctx, releases)
+
 		allImages, err = batcWorkerConverter(o.Log, o.Opts.Global.Dir, allRelatedImages)
 		if err != nil {
 			return []string{}, fmt.Errorf(errMsg, err)
@@ -145,18 +149,25 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
 		if e != nil {
 			o.Log.Error(errMsg, e)
 		}
-		e = filepath.Walk(workingDir+"/"+o.Opts.Global.From+"/"+releaseImageDir, func(path string, info os.FileInfo, err error) error {
+		// get all release images from manifest (json)
+		allRelatedImages, err := o.Manifest.GetReleaseSchema(o.Opts.Global.Dir + "/" + releaseImageExtractFullPath)
+		if err != nil {
+			return []string{}, fmt.Errorf(errMsg, err)
+		}
+
+		e = filepath.Walk(o.Opts.Global.Dir+"/"+releaseImageDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {
 				ns := strings.Split(filepath.Dir(path), releaseImageDir)
 				if len(ns) == 0 {
-					return fmt.Errorf(errMsg, "no directory found for operator-images - please verify")
+					return fmt.Errorf(errMsg, "no directory found for release-images - please verify")
 				} else {
 					name := strings.Split(ns[1], "/")
 					if len(name) != 2 {
-						return fmt.Errorf(errMsg+" %s ", "operator name and related compents are incorrect", name)
+						return fmt.Errorf(errMsg+" %s ", "release image name and related compents are incorrect", name)
 					}
+					img := findRelatedImage(name[1], allRelatedImages)
 					src := ociProtocolTrimmed + ns[0] + releaseImageDir + "/" + name[1]
-					dest := o.Opts.Destination + "/" + name[1]
+					dest := o.Opts.Destination + "/" + img
 					allImages = append(allImages, src+"*"+dest)
 				}
 			}
@@ -187,4 +198,15 @@ func batcWorkerConverter(log clog.PluggableLoggerInterface, dir string, images [
 		result = append(result, src+"*"+dest)
 	}
 	return result, nil
+}
+
+// findRelatedImage
+func findRelatedImage(name string, imgs []v1alpha3.RelatedImage) string {
+	for _, img := range imgs {
+		if name == img.Name {
+			strip := strings.Split(img.Image, "quay.io/")
+			return strip[1]
+		}
+	}
+	return ""
 }

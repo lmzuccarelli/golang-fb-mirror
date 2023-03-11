@@ -270,7 +270,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 		o.Log.Debug("destination %s ", dest)
 	} else if strings.Contains(args[0], dockerProtocol) {
 		o.Opts.Mode = diskToMirror
-		dest = o.Opts.Global.From
+		dest = workingDir + o.Opts.Global.From
 		o.Log.Debug("destination %s ", dest)
 	}
 	o.Opts.Destination = args[0]

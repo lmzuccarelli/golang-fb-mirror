@@ -55,11 +55,11 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/lmzuccarelli/golang-oci-mirror/pkg/additional/collector.go (53.2%)</option>
+				<option value="file0">github.com/lmzuccarelli/golang-oci-mirror/pkg/additional/collector.go (52.2%)</option>
 				
 				<option value="file1">github.com/lmzuccarelli/golang-oci-mirror/pkg/batch/worker.go (61.3%)</option>
 				
-				<option value="file2">github.com/lmzuccarelli/golang-oci-mirror/pkg/cli/executor.go (50.0%)</option>
+				<option value="file2">github.com/lmzuccarelli/golang-oci-mirror/pkg/cli/executor.go (50.7%)</option>
 				
 				<option value="file3">github.com/lmzuccarelli/golang-oci-mirror/pkg/config/defaults.go (100.0%)</option>
 				
@@ -71,19 +71,19 @@
 				
 				<option value="file7">github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest/oci-manifest.go (80.6%)</option>
 				
-				<option value="file8">github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror/mirror.go (55.2%)</option>
+				<option value="file8">github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror/mirror.go (51.6%)</option>
 				
 				<option value="file9">github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror/options.go (60.4%)</option>
 				
 				<option value="file10">github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror/unshare_linux.go (30.8%)</option>
 				
-				<option value="file11">github.com/lmzuccarelli/golang-oci-mirror/pkg/operator/collector.go (69.4%)</option>
+				<option value="file11">github.com/lmzuccarelli/golang-oci-mirror/pkg/operator/collector.go (69.2%)</option>
 				
 				<option value="file12">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/cincinnati.go (78.1%)</option>
 				
 				<option value="file13">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/client.go (84.6%)</option>
 				
-				<option value="file14">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/collector.go (66.7%)</option>
+				<option value="file14">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/collector.go (66.2%)</option>
 				
 				<option value="file15">github.com/lmzuccarelli/golang-oci-mirror/pkg/release/core-cincinnati.go (83.3%)</option>
 				
@@ -124,6 +124,7 @@ const (
         workingDir              string = "working-dir/"
         dockerProtocol          string = "docker://"
         ociProtocol             string = "oci://"
+        ociProtocolTrimmed      string = "oci:"
         additionalImagesDir     string = "additional-images"
         blobsDir                string = "/blobs/sha256/"
         diskToMirror            string = "diskToMirror"
@@ -160,11 +161,10 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, er
 
         var allImages []string
         if !strings.Contains(o.Opts.Destination, ociProtocol) &amp;&amp; !strings.Contains(o.Opts.Destination, dockerProtocol) </span><span class="cov0" title="0">{
-                return []string{}, fmt.Errorf(errMsg, "destination must use oci: or docker:// prefix")
+                return []string{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
         }</span>
-        <span class="cov8" title="1">dir := strings.Split(o.Opts.Destination, ":")[1]
 
-        if o.Opts.Mode == mirrorToDisk </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">if o.Opts.Mode == mirrorToDisk </span><span class="cov8" title="1">{
                 for _, img := range o.Config.ImageSetConfigurationSpec.Mirror.AdditionalImages </span><span class="cov8" title="1">{
                         irs, err := customImageParser(img.Name)
                         o.Log.Debug("%v", irs)
@@ -172,7 +172,7 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, er
                                 return []string{}, nil
                         }</span>
                         <span class="cov8" title="1">src := dockerProtocol + img.Name
-                        dest := ociProtocol + workingDir + dir + "/" + additionalImagesDir + "/" + irs.Component
+                        dest := ociProtocolTrimmed + o.Opts.Global.Dir + "/" + additionalImagesDir + "/" + irs.Component
                         o.Log.Trace("source %s", src)
                         o.Log.Trace("destination %s", dest)
                         allImages = append(allImages, src+"*"+dest)</span>
@@ -278,6 +278,7 @@ type BatchSchema struct {
         Remainder  int
 }
 
+// Worker - the main batch processor
 func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOptions) error <span class="cov8" title="1">{
 
         var errArray []error
@@ -358,6 +359,7 @@ func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOpt
         <span class="cov8" title="1">return nil</span>
 }
 
+// consoleLogFromFile
 func consoleLogFromFile(log clog.PluggableLoggerInterface) <span class="cov0" title="0">{
         dir, _ := os.ReadDir("logs")
         for _, f := range dir </span><span class="cov0" title="0">{
@@ -540,14 +542,16 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span clas
         }</span>
 
         // create release cache dir
-        <span class="cov8" title="1">err = os.MkdirAll(workingDir+"/"+releaseImageExtractDir, 0755)
+        <span class="cov8" title="1">o.Log.Trace("creating release cache directory %s ", o.Opts.Global.Dir+"/"+releaseImageExtractDir)
+        err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageExtractDir, 0755)
         if err != nil </span><span class="cov0" title="0">{
                 o.Log.Error(" %v ", err)
                 return err
         }</span>
 
         // create operator cache dir
-        <span class="cov8" title="1">err = os.MkdirAll(workingDir+"/"+operatorImageExtractDir, 0755)
+        <span class="cov8" title="1">o.Log.Trace("creating operator cache directory %s ", o.Opts.Global.Dir+"/"+operatorImageExtractDir)
+        err = os.MkdirAll(o.Opts.Global.Dir+"/"+operatorImageExtractDir, 0755)
         if err != nil </span><span class="cov0" title="0">{
                 o.Log.Error(" %v ", err)
                 return err
@@ -558,7 +562,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span clas
         // check if we need to copy or mirror
         // check if there is a change if so then continue as normal else
         // report that there is nothing to do (all up to date)
-        _, prevCfg, err := o.Diff.GetAllMetadata(workingDir + o.Opts.Global.Dir)
+        _, prevCfg, err := o.Diff.GetAllMetadata(o.Opts.Global.Dir)
         if err != nil </span><span class="cov0" title="0">{
                 o.Log.Error("%v", err)
         }</span>
@@ -611,7 +615,6 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error <span clas
         }</span>
 
         // only execute if mode is diskToMirror
-
         <span class="cov8" title="1">err = o.Diff.DeleteImages(cmd.Context())
         if err != nil </span><span class="cov0" title="0">{
                 o.Log.Error("%v", err)
@@ -643,7 +646,7 @@ func (o *ExecutorSchema) Complete(args []string) <span class="cov0" title="0">{
         var dest string
         if strings.Contains(args[0], ociProtocol) </span><span class="cov0" title="0">{
                 o.Opts.Mode = mirrorToDisk
-                dest = workingDir + strings.Trim(strings.Split(args[0], ":")[1], "/")
+                dest = workingDir + strings.Split(args[0], ociProtocol)[1]
                 o.Log.Debug("destination %s ", dest)
         }</span> else<span class="cov0" title="0"> if strings.Contains(args[0], dockerProtocol) </span><span class="cov0" title="0">{
                 o.Opts.Mode = diskToMirror
@@ -675,7 +678,7 @@ func (o *ExecutorSchema) Complete(args []string) <span class="cov0" title="0">{
                 seq := diff.Sequence{Item: item}
                 metadata = diff.SequenceSchema{Title: "golang-oci-mirror", Owner: "CFE-EAMA", Sequence: seq}
                 o.Log.Info("added new metadata %v ", metadata)
-                err := o.Diff.WriteMetadata(workingDir+o.Opts.Global.Dir, dest, metadata, o.Config)
+                err := o.Diff.WriteMetadata(o.Opts.Global.ConfigPath, dest, metadata, o.Config)
                 if err != nil </span><span class="cov0" title="0">{
                         o.Log.Error("%v", err)
                 }</span>
@@ -700,7 +703,7 @@ func (o *ExecutorSchema) Validate(dest []string) error <span class="cov8" title=
 }
 
 // mergeImages - simple function to append releated images
-//nolint
+// nolint
 func mergeImages(base, in []string) []string <span class="cov8" title="1">{
         for _, img := range in </span><span class="cov8" title="1">{
                 base = append(base, img)
@@ -1546,8 +1549,8 @@ func (o *Mirror) copy(ctx context.Context, src, dest string, opts *CopyOptions, 
                 }</span>
         }
 
-        <span class="cov8" title="1">opts.DigestFile = "test-digest"
-        writer := io.Writer(&amp;out)
+        //opts.DigestFile = "test-digest"
+        <span class="cov8" title="1">writer := io.Writer(&amp;out)
 
         co := &amp;copy.Options{
                 RemoveSignatures:                 opts.RemoveSignatures,
@@ -1574,12 +1577,12 @@ func (o *Mirror) copy(ctx context.Context, src, dest string, opts *CopyOptions, 
                         return err
                 }</span>
                 <span class="cov8" title="1">out.Flush()
-                if opts.DigestFile != "" </span><span class="cov8" title="1">{
+                if opts.DigestFile != "" </span><span class="cov0" title="0">{
                         manifestDigest, err := manifest.Digest(manifestBytes)
                         if err != nil </span><span class="cov0" title="0">{
                                 return err
                         }</span>
-                        <span class="cov8" title="1">if err = os.WriteFile(opts.DigestFile, []byte(manifestDigest.String()), 0644); err != nil </span><span class="cov0" title="0">{
+                        <span class="cov0" title="0">if err = os.WriteFile(opts.DigestFile, []byte(manifestDigest.String()), 0644); err != nil </span><span class="cov0" title="0">{
                                 return fmt.Errorf("Failed to write digest to file %q: %w", opts.DigestFile, err)
                         }</span>
                 }
@@ -2212,6 +2215,7 @@ const (
         workingDir                  string = "working-dir/"
         dockerProtocol              string = "docker://"
         ociProtocol                 string = "oci://"
+        ociProtocolTrimmed          string = "oci:"
         releaseImageDir             string = "release-images"
         operatorImageDir            string = "operator-images"
         releaseImageExtractDir      string = "hold-release"
@@ -2259,10 +2263,9 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
         if !strings.Contains(o.Opts.Destination, ociProtocol) &amp;&amp; !strings.Contains(o.Opts.Destination, dockerProtocol) </span><span class="cov0" title="0">{
                 return []string{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
         }</span>
-        <span class="cov8" title="1">dir := strings.Split(o.Opts.Destination, ":")[1]
 
         // compile a map to compare channels,min &amp; max versions
-        for _, ops := range o.Config.Mirror.Operators </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">for _, ops := range o.Config.Mirror.Operators </span><span class="cov8" title="1">{
                 o.Log.Info("isc operators: %s\n", ops.Catalog)
                 for _, pkg := range ops.Packages </span><span class="cov8" title="1">{
                         o.Log.Info("catalog packages: %s \n", pkg.Name)
@@ -2287,7 +2290,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
                                 // download the operator index image
                                 o.Log.Info("copying operator image %v", op.Catalog)
                                 src := dockerProtocol + op.Catalog
-                                dest := ociProtocol + workingDir + operatorImageDir
+                                dest := ociProtocolTrimmed + o.Opts.Global.Dir + "/" + operatorImageDir
                                 err := o.Mirror.Run(ctx, src, dest, "copy", &amp;o.Opts, *writer)
                                 writer.Flush()
                                 if err != nil </span><span class="cov0" title="0">{
@@ -2303,7 +2306,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
                                 }
 
                                 // it's in oci format so we can go directly to the index.json file
-                                <span class="cov8" title="1">oci, err := o.Manifest.GetImageIndex(workingDir + operatorImageDir)
+                                <span class="cov8" title="1">oci, err := o.Manifest.GetImageIndex(o.Opts.Global.Dir + "/" + operatorImageDir)
                                 if err != nil </span><span class="cov0" title="0">{
                                         return []string{}, err
                                 }</span>
@@ -2320,14 +2323,14 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
                                 o.Log.Info("manifest %v", manifest)
 
                                 // read the operator image manifest
-                                oci, err = o.Manifest.GetImageManifest(workingDir + operatorImageDir + blobsDir + manifest)
+                                oci, err = o.Manifest.GetImageManifest(o.Opts.Global.Dir + "/" + operatorImageDir + blobsDir + manifest)
                                 if err != nil </span><span class="cov0" title="0">{
                                         return []string{}, err
                                 }</span>
 
                                 // read the config digest to get the detailed manifest
                                 // looking for the lable to search for a specific folder
-                                <span class="cov8" title="1">ocs, err := o.Manifest.GetOperatorConfig(workingDir + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
+                                <span class="cov8" title="1">ocs, err := o.Manifest.GetOperatorConfig(o.Opts.Global.Dir + "/" + operatorImageDir + blobsDir + strings.Split(oci.Config.Digest, ":")[1])
                                 if err != nil </span><span class="cov0" title="0">{
                                         return []string{}, err
                                 }</span>
@@ -2337,7 +2340,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
 
                                 // untar all the blobs for the operator
                                 // if the layer with "label (from previous step) is found to a specific folder"
-                                err = o.Manifest.ExtractLayersOCI(workingDir+operatorImageDir+blobsDir, workingDir+operatorImageExtractDir, label, oci)
+                                err = o.Manifest.ExtractLayersOCI(o.Opts.Global.Dir+"/"+operatorImageDir+blobsDir, o.Opts.Global.Dir+"/"+operatorImageExtractDir, label, oci)
                                 if err != nil </span><span class="cov0" title="0">{
                                         return []string{}, err
                                 }</span>
@@ -2347,13 +2350,13 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
                         // this is the equivalent of the headOnly mode
                         // only the latest version of each operator will be selected
                         <span class="cov8" title="1">if len(op.Packages) == 0 </span><span class="cov8" title="1">{
-                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(operatorImageExtractDir, label)
+                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalog(o.Opts.Global.Dir+"/"+operatorImageExtractDir, label)
                                 if err != nil </span><span class="cov0" title="0">{
                                         return []string{}, err
                                 }</span>
                         } else<span class="cov8" title="1"> {
                                 // iterate through each package
-                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(operatorImageExtractDir, label, op, compare)
+                                relatedImages, err = o.Manifest.GetRelatedImagesFromCatalogByFilter(o.Opts.Global.Dir+"/"+operatorImageExtractDir, label, op, compare)
                                 if err != nil </span><span class="cov0" title="0">{
                                         return []string{}, err
                                 }</span>
@@ -2376,7 +2379,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
                         o.Log.Debug("  image %s", k)
                         cleanedImages = append(cleanedImages, v1alpha3.RelatedImage{Name: v, Image: k})
                 }</span>
-                <span class="cov8" title="1">allImages, err = batchWorkerConverter(o.Log, dir, cleanedImages)
+                <span class="cov8" title="1">allImages, err = batchWorkerConverter(o.Log, o.Opts.Global.Dir, cleanedImages)
                 if err != nil </span><span class="cov0" title="0">{
                         return []string{}, err
                 }</span>
@@ -2401,7 +2404,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error
                                         if len(name) != 3 </span><span class="cov0" title="0">{
                                                 return fmt.Errorf(errMsg+"%s", "operator name and related compents are incorrect", name)
                                         }</span>
-                                        <span class="cov0" title="0">src := strings.Trim(ociProtocol, "/") + ns[0] + operatorImageDir + "/" + name[1] + "/" + name[2]
+                                        <span class="cov0" title="0">src := ociProtocolTrimmed + ns[0] + operatorImageDir + "/" + name[1] + "/" + name[2]
                                         dest := o.Opts.Destination + "/" + name[1]
                                         allImages = append(allImages, src+"*"+dest)</span>
                                 }
@@ -2452,7 +2455,7 @@ func batchWorkerConverter(log clog.PluggableLoggerInterface, dir string, images 
                         log.Error("[batchWorkerConverter] %v", err)
                         return result, err
                 }</span>
-                <span class="cov8" title="1">err = os.MkdirAll(workingDir+dir+"/"+operatorImageDir+"/"+irs.Namespace, 0750)
+                <span class="cov8" title="1">err = os.MkdirAll(dir+"/"+operatorImageDir+"/"+irs.Namespace, 0750)
                 if err != nil </span><span class="cov0" title="0">{
                         log.Error("[batchWorkerConverter] %v", err)
                         return result, err
@@ -2463,9 +2466,9 @@ func batchWorkerConverter(log clog.PluggableLoggerInterface, dir string, images 
                         s := fmt.Sprintf("%d", timestamp)
                         img.Name = fmt.Sprintf("%x", sha256.Sum256([]byte(s)))[:6]
                 }</span>
-                <span class="cov8" title="1">dest := ociProtocol + workingDir + dir + "/" + operatorImageDir + "/" + irs.Namespace + "/" + img.Name
+                <span class="cov8" title="1">dest := ociProtocolTrimmed + dir + "/" + operatorImageDir + "/" + irs.Namespace + "/" + img.Name
                 log.Debug("source %s ", img.Image)
-                log.Debug("destination %s ", workingDir+dir+"/"+operatorImageDir+"/"+irs.Namespace+"/"+img.Name)
+                log.Debug("destination %s ", dir+"/"+operatorImageDir+"/"+irs.Namespace+"/"+img.Name)
                 result = append(result, src+"*"+dest)</span>
         }
         <span class="cov8" title="1">return result, nil</span>
@@ -2908,6 +2911,7 @@ const (
         workingDir                  string = "working-dir/"
         dockerProtocol              string = "docker://"
         ociProtocol                 string = "oci://"
+        ociProtocolTrimmed          string = "oci:"
         releaseImageDir             string = "release-images"
         operatorImageDir            string = "operator-images"
         releaseImageExtractDir      string = "hold-release"
@@ -2961,16 +2965,15 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
                 <span class="cov8" title="1">if !strings.Contains(o.Opts.Destination, ociProtocol) </span><span class="cov0" title="0">{
                         return []string{}, fmt.Errorf(" [ReleaseImageCollector] destination must use oci: or docker:// prefix")
                 }</span>
-                <span class="cov8" title="1">dir := strings.Split(o.Opts.Destination, ":")[1]
 
-                writer := bufio.NewWriter(f)
+                <span class="cov8" title="1">writer := bufio.NewWriter(f)
                 defer f.Close()
                 // dev mode debugging
                 if !o.Opts.Dev </span><span class="cov8" title="1">{
                         for key := range releases </span><span class="cov8" title="1">{
                                 o.Log.Info("copying image %s ", key)
                                 src := dockerProtocol + key
-                                dest := ociProtocol + workingDir + releaseImageDir
+                                dest := ociProtocolTrimmed + o.Opts.Global.Dir + "/" + releaseImageDir
                                 err := o.Mirror.Run(ctx, src, dest, "copy", &amp;o.Opts, *writer)
                                 if err != nil </span><span class="cov8" title="1">{
                                         return []string{}, fmt.Errorf(errMsg, err)
@@ -2988,7 +2991,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
                         }
                 }
 
-                <span class="cov8" title="1">oci, err := o.Manifest.GetImageIndex(workingDir + releaseImageDir)
+                <span class="cov8" title="1">oci, err := o.Manifest.GetImageIndex(o.Opts.Global.Dir + "/" + releaseImageDir)
                 if err != nil </span><span class="cov8" title="1">{
                         o.Log.Error("[ReleaseImageCollector] %v ", err)
                         return []string{}, fmt.Errorf(errMsg, err)
@@ -3001,23 +3004,23 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
                 <span class="cov8" title="1">manifest := strings.Split(oci.Manifests[0].Digest, ":")[1]
                 o.Log.Debug("image index %v", manifest)
 
-                oci, err = o.Manifest.GetImageManifest(workingDir + releaseImageDir + blobsDir + manifest)
+                oci, err = o.Manifest.GetImageManifest(o.Opts.Global.Dir + "/" + releaseImageDir + blobsDir + manifest)
                 if err != nil </span><span class="cov8" title="1">{
                         return []string{}, fmt.Errorf(errMsg, err)
                 }</span>
                 <span class="cov8" title="1">o.Log.Debug("manifest %v ", oci.Config.Digest)
 
-                err = o.Manifest.ExtractLayersOCI(workingDir+releaseImageDir+blobsDir, workingDir+releaseImageExtractDir, releaseManifests, oci)
+                err = o.Manifest.ExtractLayersOCI(o.Opts.Global.Dir+"/"+releaseImageDir+blobsDir, o.Opts.Global.Dir+"/"+releaseImageExtractDir, releaseManifests, oci)
                 if err != nil </span><span class="cov8" title="1">{
                         return []string{}, fmt.Errorf(errMsg, err)
                 }</span>
                 <span class="cov8" title="1">o.Log.Debug("extracted oci layer %s ", workingDir+releaseImageExtractDir)
 
-                allRelatedImages, err := o.Manifest.GetReleaseSchema(workingDir + releaseImageExtractFullPath)
+                allRelatedImages, err := o.Manifest.GetReleaseSchema(o.Opts.Global.Dir + "/" + releaseImageExtractFullPath)
                 if err != nil </span><span class="cov0" title="0">{
                         return []string{}, fmt.Errorf(errMsg, err)
                 }</span>
-                <span class="cov8" title="1">allImages, err = batcWorkerConverter(o.Log, dir, allRelatedImages)
+                <span class="cov8" title="1">allImages, err = batcWorkerConverter(o.Log, o.Opts.Global.Dir, allRelatedImages)
                 if err != nil </span><span class="cov0" title="0">{
                         return []string{}, fmt.Errorf(errMsg, err)
                 }</span>
@@ -3041,7 +3044,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error)
                                         if len(name) != 2 </span><span class="cov0" title="0">{
                                                 return fmt.Errorf(errMsg+" %s ", "operator name and related compents are incorrect", name)
                                         }</span>
-                                        <span class="cov0" title="0">src := strings.Trim(ociProtocol, "/") + ns[0] + releaseImageDir + "/" + name[1]
+                                        <span class="cov0" title="0">src := ociProtocolTrimmed + ns[0] + releaseImageDir + "/" + name[1]
                                         dest := o.Opts.Destination + "/" + name[1]
                                         allImages = append(allImages, src+"*"+dest)</span>
                                 }
@@ -3062,8 +3065,8 @@ func batcWorkerConverter(log clog.PluggableLoggerInterface, dir string, images [
         var result []string
         for _, img := range images </span><span class="cov8" title="1">{
                 src := dockerProtocol + img.Image
-                dest := ociProtocol + workingDir + dir + "/" + releaseImageDir + "/" + img.Name
-                err := os.MkdirAll(workingDir+dir+"/"+releaseImageDir+"/"+img.Name, 0750)
+                dest := ociProtocolTrimmed + dir + "/" + releaseImageDir + "/" + img.Name
+                err := os.MkdirAll(dir+"/"+releaseImageDir+"/"+img.Name, 0750)
                 if err != nil </span><span class="cov0" title="0">{
                         log.Error("[batchWorkerConverter] %v", err)
                         return []string{}, err
