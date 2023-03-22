@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ func TestReleaseImageCollector(t *testing.T) {
 	global := &mirror.GlobalOptions{
 		TlsVerify:      false,
 		InsecurePolicy: true,
-		Dir:            "tests",
+		Dir:            "../../tests",
 	}
 
 	_, sharedOpts := mirror.SharedImageFlags()
@@ -141,11 +142,12 @@ func TestReleaseImageCollector(t *testing.T) {
 		log.Debug("completed test related images %v ", res)
 	})
 
-	t.Run("Testing ReleaseImageCollector : should fail image index", func(t *testing.T) {
-		manifest := &Manifest{Log: log, FailImageIndex: true}
+	t.Run("Testing ReleaseImageCollector : should fail mirror", func(t *testing.T) {
+		os.RemoveAll("../../tests/hold-release/")
+		manifest := &Manifest{Log: log}
 		ex := &Collector{
 			Log:        log,
-			Mirror:     &Mirror{Fail: false},
+			Mirror:     &Mirror{Fail: true},
 			Config:     cfg,
 			Manifest:   manifest,
 			Opts:       opts,
@@ -158,11 +160,11 @@ func TestReleaseImageCollector(t *testing.T) {
 		log.Debug("completed test related images %v ", res)
 	})
 
-	t.Run("Testing ReleaseImageCollector : should fail mirror", func(t *testing.T) {
-		manifest := &Manifest{Log: log}
+	t.Run("Testing ReleaseImageCollector : should fail image index", func(t *testing.T) {
+		manifest := &Manifest{Log: log, FailImageIndex: true}
 		ex := &Collector{
 			Log:        log,
-			Mirror:     &Mirror{Fail: true},
+			Mirror:     &Mirror{Fail: false},
 			Config:     cfg,
 			Manifest:   manifest,
 			Opts:       opts,
