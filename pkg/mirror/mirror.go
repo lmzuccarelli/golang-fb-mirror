@@ -244,6 +244,7 @@ func (o *Mirror) copy(ctx context.Context, src, dest string, opts *CopyOptions, 
 	}
 
 	return retry.IfNecessary(ctx, func() error {
+
 		//manifestBytes, err := copy.Image(ctx, policyContext, destRef, srcRef, &copy.Options{
 		manifestBytes, err := o.mc.CopyImage(ctx, policyContext, destRef, srcRef, co)
 		if err != nil {

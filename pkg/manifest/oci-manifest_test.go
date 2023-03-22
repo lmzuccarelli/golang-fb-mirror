@@ -3,9 +3,9 @@ package manifest
 import (
 	"testing"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
 )
 
 func TestGetAllManifests(t *testing.T) {

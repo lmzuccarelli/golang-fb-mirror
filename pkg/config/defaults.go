@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
 )
 
 // Complete set default values in the ImageSetConfiguration

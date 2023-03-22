@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 )
 
 func TestReleaseImageCollector(t *testing.T) {
@@ -310,11 +310,9 @@ func (o *Manifest) ExtractLayersOCI(filePath, toPath, label string, oci *v1alpha
 	return nil
 }
 
-func (o *Cincinnati) GetReleaseReferenceImages(ctx context.Context) map[string]struct{} {
-	res := make(map[string]struct{})
-	type downloads struct{}
-	res["one"] = downloads{}
-	res["two"] = downloads{}
+func (o *Cincinnati) GetReleaseReferenceImages(ctx context.Context) []v1alpha3.CopyImageSchema {
+	var res []v1alpha3.CopyImageSchema
+	res = append(res, v1alpha3.CopyImageSchema{Source: "test", Destination: "test"})
 	return res
 }
 
@@ -327,4 +325,8 @@ func (o *Cincinnati) NewOCPClient(uuid uuid.UUID) (Client, error) {
 
 func (o *Cincinnati) NewOKDClient(uuid uuid.UUID) (Client, error) {
 	return o.Client, nil
+}
+
+func (o *Cincinnati) GenerateReleaseSignatures(context.Context, []v1alpha3.RelatedImage) {
+	fmt.Println("test release signature")
 }

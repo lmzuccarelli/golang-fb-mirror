@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,10 +14,10 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/google/uuid"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 
 	//nolint
 	"golang.org/x/crypto/openpgp"
@@ -30,22 +31,36 @@ const (
 )
 
 type CincinnatiInterface interface {
-	GetReleaseReferenceImages(context.Context) map[string]struct{}
-	GenerateReleaseSignatures(context.Context, []v1alpha3.RelatedImage)
+	GetReleaseReferenceImages(context.Context) []v1alpha3.CopyImageSchema
 	NewOCPClient(uuid.UUID) (Client, error)
 	NewOKDClient(uuid.UUID) (Client, error)
 }
 
-func NewCincinnati(log clog.PluggableLoggerInterface, config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions, c Client, b bool) CincinnatiInterface {
-	return &CincinnatiSchema{Log: log, Config: config, Opts: opts, Client: c, Fail: b}
+type SignatureInterface interface {
+	GenerateReleaseSignatures(context.Context, []v1alpha3.CopyImageSchema) ([]v1alpha3.CopyImageSchema, error)
 }
 
-type CincinnatiSchema struct {
+func NewCincinnati(log clog.PluggableLoggerInterface, config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions, c Client, b bool, sig SignatureInterface) CincinnatiInterface {
+	return &CincinnatiSchema{Log: log, Config: config, Opts: opts, Client: c, Fail: b, Signature: sig}
+}
+
+func NewSignatureClient(log clog.PluggableLoggerInterface, config *v1alpha2.ImageSetConfiguration, opts *mirror.CopyOptions) SignatureInterface {
+	return &SignatureSchema{Log: log, Config: config, Opts: opts}
+}
+
+type SignatureSchema struct {
 	Log    clog.PluggableLoggerInterface
 	Config *v1alpha2.ImageSetConfiguration
 	Opts   *mirror.CopyOptions
-	Client Client
-	Fail   bool
+}
+
+type CincinnatiSchema struct {
+	Log       clog.PluggableLoggerInterface
+	Config    *v1alpha2.ImageSetConfiguration
+	Opts      *mirror.CopyOptions
+	Client    Client
+	Signature SignatureInterface
+	Fail      bool
 }
 
 var (
@@ -114,19 +129,16 @@ func (o *CincinnatiSchema) NewOKDClient(uuid uuid.UUID) (Client, error) {
 	return o.Client, nil
 }
 
-func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[string]struct{} {
+func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) []v1alpha3.CopyImageSchema {
 
 	var (
-		releaseDownloads = downloads{}
-		errs             = []error{}
+		allImages []v1alpha3.CopyImageSchema
+		errs      = []error{}
 	)
 
 	for _, arch := range o.Config.Mirror.Platform.Architectures {
-
 		versionsByChannel := make(map[string]v1alpha2.ReleaseChannel, len(o.Config.Mirror.Platform.Channels))
-
 		for _, ch := range o.Config.Mirror.Platform.Channels {
-
 			var client Client
 			var err error
 			switch ch.Type {
@@ -150,7 +162,6 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 			}
 
 			if len(ch.MaxVersion) == 0 || len(ch.MinVersion) == 0 {
-
 				// Find channel maximum value and only set the minimum as well if heads-only is true
 				if len(ch.MaxVersion) == 0 {
 					latest, err := GetChannelMinOrMax(ctx, client, arch, ch.Name, false)
@@ -198,7 +209,7 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 				errs = append(errs, err)
 				continue
 			}
-			releaseDownloads.Merge(downloads)
+			allImages = append(allImages, downloads...)
 		}
 
 		// Update cfg release channels with maximum and minimum versions
@@ -221,33 +232,24 @@ func (o *CincinnatiSchema) GetReleaseReferenceImages(ctx context.Context) map[st
 				errs = append(errs, fmt.Errorf("error calculating cross channel upgrades: %v", err))
 				continue
 			}
-			releaseDownloads.Merge(newDownloads)
+			allImages = append(allImages, newDownloads...)
 		}
 	}
 
-	o.generateReleaseSignatures(ctx, releaseDownloads)
+	imgs, err := o.Signature.GenerateReleaseSignatures(ctx, allImages)
+	if err != nil {
+		o.Log.Error("error list %v ", err)
+	}
 
 	for _, e := range errs {
 		o.Log.Error("error list %v ", e)
 	}
-	return releaseDownloads
-}
-
-type downloads map[string]struct{}
-
-func (d downloads) Merge(in downloads) {
-	for k, v := range in {
-		_, ok := d[k]
-		if ok {
-			continue
-		}
-		d[k] = v
-	}
+	return imgs
 }
 
 // getDownloads will prepare the downloads map for mirroring
-func getChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface, c Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) (downloads, error) {
-	allDownloads := downloads{}
+func getChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface, c Client, lastChannels []v1alpha2.ReleaseChannel, channel v1alpha2.ReleaseChannel, arch string) ([]v1alpha3.CopyImageSchema, error) {
+	var allImages []v1alpha3.CopyImageSchema
 
 	var prevChannel v1alpha2.ReleaseChannel
 	for _, ch := range lastChannels {
@@ -259,43 +261,43 @@ func getChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface,
 	// Plot between min and max of channel
 	first, err := semver.Parse(channel.MinVersion)
 	if err != nil {
-		return allDownloads, err
+		return allImages, err
 	}
 	last, err := semver.Parse(channel.MaxVersion)
 	if err != nil {
-		return allDownloads, err
+		return allImages, err
 	}
 
-	var newDownloads downloads
+	var newDownloads []v1alpha3.CopyImageSchema
 	if channel.ShortestPath {
 		current, newest, updates, err := CalculateUpgrades(ctx, c, arch, channel.Name, channel.Name, first, last)
 		if err != nil {
-			return allDownloads, err
+			return allImages, err
 		}
 		newDownloads = gatherUpdates(log, current, newest, updates)
 
 	} else {
 		lowRange, err := semver.ParseRange(fmt.Sprintf(">=%s", first))
 		if err != nil {
-			return allDownloads, err
+			return allImages, err
 		}
 		highRange, err := semver.ParseRange(fmt.Sprintf("<=%s", last))
 		if err != nil {
-			return allDownloads, err
+			return allImages, err
 		}
 		versions, err := GetUpdatesInRange(ctx, c, channel.Name, arch, highRange.AND(lowRange))
 		if err != nil {
-			return allDownloads, err
+			return allImages, err
 		}
 		newDownloads = gatherUpdates(log, Update{}, Update{}, versions)
 	}
-	allDownloads.Merge(newDownloads)
+	allImages = append(allImages, newDownloads...)
 
-	return allDownloads, nil
+	return allImages, nil
 }
 
 // getCrossChannelDownloads will determine required downloads between channel versions (for OCP only)
-func getCrossChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface, ocpClient Client, arch string, channels []v1alpha2.ReleaseChannel) (downloads, error) {
+func getCrossChannelDownloads(ctx context.Context, log clog.PluggableLoggerInterface, ocpClient Client, arch string, channels []v1alpha2.ReleaseChannel) ([]v1alpha3.CopyImageSchema, error) {
 	// Strip any OKD channels from the list
 
 	var ocpChannels []v1alpha2.ReleaseChannel
@@ -306,63 +308,57 @@ func getCrossChannelDownloads(ctx context.Context, log clog.PluggableLoggerInter
 	}
 	// If no other channels exist, return no downloads
 	if len(ocpChannels) == 0 {
-		return downloads{}, nil
+		return []v1alpha3.CopyImageSchema{}, nil
 	}
 
 	firstCh, first, err := FindRelease(ocpChannels, true)
 	if err != nil {
-		return downloads{}, fmt.Errorf("failed to find minimum release version: %v", err)
+		return []v1alpha3.CopyImageSchema{}, fmt.Errorf("failed to find minimum release version: %v", err)
 	}
 	lastCh, last, err := FindRelease(ocpChannels, false)
 	if err != nil {
-		return downloads{}, fmt.Errorf("failed to find maximum release version: %v", err)
+		return []v1alpha3.CopyImageSchema{}, fmt.Errorf("failed to find maximum release version: %v", err)
 	}
 	current, newest, updates, err := CalculateUpgrades(ctx, ocpClient, arch, firstCh, lastCh, first, last)
 	if err != nil {
-		return downloads{}, fmt.Errorf("failed to get upgrade graph: %v", err)
+		return []v1alpha3.CopyImageSchema{}, fmt.Errorf("failed to get upgrade graph: %v", err)
 	}
 	return gatherUpdates(log, current, newest, updates), nil
 }
 
 // gatherUpdates
-func gatherUpdates(log clog.PluggableLoggerInterface, current, newest Update, updates []Update) downloads {
-	releaseDownloads := downloads{}
+func gatherUpdates(log clog.PluggableLoggerInterface, current, newest Update, updates []Update) []v1alpha3.CopyImageSchema {
+	var allImages []v1alpha3.CopyImageSchema
 	for _, update := range updates {
 		log.Info("Found update %s\n", update.Version)
-		releaseDownloads[update.Image] = struct{}{}
+		allImages = append(allImages, v1alpha3.CopyImageSchema{Source: update.Image, Destination: ""})
 	}
 
 	if current.Image != "" {
-		releaseDownloads[current.Image] = struct{}{}
+		allImages = append(allImages, v1alpha3.CopyImageSchema{Source: current.Image, Destination: ""})
 	}
 
 	if newest.Image != "" {
-		releaseDownloads[newest.Image] = struct{}{}
+		allImages = append(allImages, v1alpha3.CopyImageSchema{Source: newest.Image, Destination: ""})
 	}
 
-	return releaseDownloads
+	return allImages
 }
 
-func (o *CincinnatiSchema) GenerateReleaseSignatures(ctx context.Context, imgs []v1alpha3.RelatedImage) {
-	relatedDownloads := make(map[string]struct{})
-	for _, img := range imgs {
-		relatedDownloads[img.Image] = struct{}{}
-	}
-	o.generateReleaseSignatures(ctx, relatedDownloads)
-}
-
-func (o *CincinnatiSchema) generateReleaseSignatures(ctx context.Context, rd map[string]struct{}) {
+// GenerateReleaseSignatures
+func (o *SignatureSchema) GenerateReleaseSignatures(ctx context.Context, rd []v1alpha3.CopyImageSchema) ([]v1alpha3.CopyImageSchema, error) {
 
 	var data []byte
 	var err error
+	var imgs []v1alpha3.CopyImageSchema
 	// set up http object
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
 	}
 	httpClient := &http.Client{Transport: tr}
 
-	for image := range rd {
-		digest := strings.Split(image, ":")[1]
+	for _, image := range rd {
+		digest := strings.Split(image.Source, ":")[1]
 		// check if the image is in the cache else
 		// do a lookup and download it to cache
 		data, err = os.ReadFile(o.Opts.Global.Dir + SignatureDir + digest)
@@ -400,7 +396,7 @@ func (o *CincinnatiSchema) generateReleaseSignatures(ctx context.Context, rd map
 			if err != nil {
 				o.Log.Error("%v", err)
 			}
-			o.Log.Debug("Keyring %v", keyring)
+			o.Log.Debug("keyring %v", keyring)
 
 			md, err := openpgp.ReadMessage(bytes.NewReader(data), keyring, nil, nil)
 			if err != nil {
@@ -445,6 +441,15 @@ func (o *CincinnatiSchema) generateReleaseSignatures(ctx context.Context, rd map
 			}
 
 			o.Log.Info("content %s", string(content))
+			// update the image with the actaul reference from the contents json
+			var signSchema *v1alpha3.SignatureContentSchema
+			err = json.Unmarshal(content, &signSchema)
+			if err != nil {
+				o.Log.Error("could not unmarshal json %v", err)
+				return []v1alpha3.CopyImageSchema{}, err
+			}
+			image.Source = signSchema.Critical.Identity.DockerReference
+			o.Log.Info("image found : %s", signSchema.Critical.Identity.DockerReference)
 			o.Log.Info("public Key : %s", strings.ToUpper(fmt.Sprintf("%x", md.SignedBy.PublicKey.Fingerprint)))
 
 			// write signature to cache
@@ -452,8 +457,11 @@ func (o *CincinnatiSchema) generateReleaseSignatures(ctx context.Context, rd map
 			if ferr != nil {
 				o.Log.Error("%v", ferr)
 			}
+			imgs = append(imgs, image)
 		} else {
 			o.Log.Warn("no signature found for %s", digest)
+			return []v1alpha3.CopyImageSchema{}, fmt.Errorf("no signature found for %s image %s", digest, image.Source)
 		}
 	}
+	return imgs, nil
 }

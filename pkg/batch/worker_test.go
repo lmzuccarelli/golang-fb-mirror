@@ -5,10 +5,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 )
 
 func TestWorker(t *testing.T) {
@@ -38,12 +38,13 @@ func TestWorker(t *testing.T) {
 
 	// this is a facade to get code coverage up
 	t.Run("Testing Worker : should pass", func(t *testing.T) {
-		relatedImages := []string{
-			"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-			"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-			"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-			"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-			"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+		relatedImages := []v1alpha3.CopyImageSchema{
+			{Source: "docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+			{Source: "docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+			{Source: "docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+			{Source: "docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+			{Source: "docker://registry/name/namespace/sometestimage-e@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+			{Source: "docker://registry/name/namespace/sometestimage-f@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
 		}
 		err := w.Worker(context.Background(), relatedImages, opts)
 		if err != nil {

@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/config"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
 )
 
 type validationFunc func(cfg *v1alpha2.ImageSetConfiguration) error

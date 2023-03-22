@@ -5,7 +5,7 @@ import (
 	"sort"
 
 	"github.com/blang/semver/v4"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
 )
 
 // ErrNoPreviousRelease is returned when no releases can be found in the

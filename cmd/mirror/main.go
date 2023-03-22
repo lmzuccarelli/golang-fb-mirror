@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	cli "github.com/lmzuccarelli/golang-oci-mirror/pkg/cli"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
+	cli "github.com/lmzuccarelli/golang-fb-mirror/pkg/cli"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
 )
 
 func main() {

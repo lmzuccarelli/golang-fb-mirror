@@ -7,9 +7,10 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 	_ "k8s.io/klog/v2" // integration tests set glog flags.
 )
 
@@ -68,6 +69,7 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 	t.Run("TestGetReleaseReferenceImages should pass", func(t *testing.T) {
 
 		c := &mockClient{}
+		signature := &mockSignature{Log: log}
 		requestQuery := make(chan string, 1)
 		defer close(requestQuery)
 
@@ -81,7 +83,7 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 			t.Fatalf("should not fail endpoint parse")
 		}
 		c.url = endpoint
-		sch := NewCincinnati(log, &cfg, &opts, c, false)
+		sch := NewCincinnati(log, &cfg, &opts, c, false, signature)
 		res := sch.GetReleaseReferenceImages(context.Background())
 
 		log.Debug("result from cincinnati %v", res)
@@ -93,6 +95,7 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 	t.Run("TestGetReleaseReferenceImages should fail", func(t *testing.T) {
 
 		c := &mockClient{}
+		signature := &mockSignature{Log: log}
 		requestQuery := make(chan string, 1)
 		defer close(requestQuery)
 
@@ -106,7 +109,7 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 			t.Fatalf("should not fail endpoint parse")
 		}
 		c.url = endpoint
-		sch := NewCincinnati(log, &cfg, &opts, c, true)
+		sch := NewCincinnati(log, &cfg, &opts, c, true, signature)
 		res := sch.GetReleaseReferenceImages(context.Background())
 
 		log.Debug("result from cincinnati %v", res)
@@ -114,4 +117,13 @@ func TestGetReleaseReferenceImages(t *testing.T) {
 			t.Fatalf("should return a related images")
 		}
 	})
+}
+
+type mockSignature struct {
+	Log clog.PluggableLoggerInterface
+}
+
+func (o *mockSignature) GenerateReleaseSignatures(ctx context.Context, rd []v1alpha3.CopyImageSchema) ([]v1alpha3.CopyImageSchema, error) {
+	o.Log.Info("signature verification (mock)")
+	return []v1alpha3.CopyImageSchema{}, nil
 }

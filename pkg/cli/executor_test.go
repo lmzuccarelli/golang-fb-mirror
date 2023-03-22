@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/diff"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/config"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/diff"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 	"github.com/spf13/cobra"
 )
 
@@ -226,51 +227,54 @@ func (o *Diff) WriteMetadata(dir, dest string, sch diff.SequenceSchema, cfg v1al
 	return nil
 }
 
-func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOptions) error {
+func (o *Batch) Worker(ctx context.Context, images []v1alpha3.CopyImageSchema, opts mirror.CopyOptions) error {
 	if o.Fail {
 		return fmt.Errorf("forced error")
 	}
 	return nil
 }
 
-func (o *Collector) OperatorImageCollector(ctx context.Context) ([]string, error) {
+func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.CopyImageSchema, error) {
 	if o.Fail {
-		return []string{}, fmt.Errorf("forced error operator collector")
+		return []v1alpha3.CopyImageSchema{}, fmt.Errorf("forced error operator collector")
 	}
-	test := []string{
-		"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+	test := []v1alpha3.CopyImageSchema{
+		{Source: "docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-e@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-f@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
 	}
 	return test, nil
 }
 
-func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]string, error) {
+func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyImageSchema, error) {
 	if o.Fail {
-		return []string{}, fmt.Errorf("forced error release collector")
+		return []v1alpha3.CopyImageSchema{}, fmt.Errorf("forced error release collector")
 	}
-	test := []string{
-		"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+	test := []v1alpha3.CopyImageSchema{
+		{Source: "docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-e@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-f@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
 	}
 	return test, nil
 }
 
-func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, error) {
+func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.CopyImageSchema, error) {
 	if o.Fail {
-		return []string{}, fmt.Errorf("forced error release collector")
+		return []v1alpha3.CopyImageSchema{}, fmt.Errorf("forced error release collector")
 	}
-	test := []string{
-		"docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
-		"docker://registry/name/namespace/sometestimage-ea@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea*oci:test",
+	test := []v1alpha3.CopyImageSchema{
+		{Source: "docker://registry/name/namespace/sometestimage-a@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-b@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-c@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-d@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-e@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
+		{Source: "docker://registry/name/namespace/sometestimage-f@sha256:f30638f60452062aba36a26ee6c036feead2f03b28f2c47f2b0a991e41baebea", Destination: "oci:test"},
 	}
 	return test, nil
 }

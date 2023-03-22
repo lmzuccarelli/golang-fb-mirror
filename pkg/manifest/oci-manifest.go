@@ -4,15 +4,16 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
 	"k8s.io/klog/v2"
 )
 
@@ -137,18 +138,22 @@ func (o *Manifest) GetRelatedImagesFromCatalogByFilter(filePath, label string, o
 
 // ExtractLayersOCI
 func (o *Manifest) ExtractLayersOCI(fromPath, toPath, label string, oci *v1alpha3.OCISchema) error {
-	for _, blob := range oci.Layers {
-		if !strings.Contains(blob.Digest, "sha256") {
-			return fmt.Errorf("the digest format is not correct %s ", blob.Digest)
+	if _, err := os.Stat(toPath + "/" + label); errors.Is(err, os.ErrNotExist) {
+		for _, blob := range oci.Layers {
+			if !strings.Contains(blob.Digest, "sha256") {
+				return fmt.Errorf("the digest format is not correct %s ", blob.Digest)
+			}
+			f, err := os.Open(fromPath + "/" + strings.Split(blob.Digest, ":")[1])
+			if err != nil {
+				return err
+			}
+			err = untar(f, toPath, label)
+			if err != nil {
+				return err
+			}
 		}
-		f, err := os.Open(fromPath + "/" + strings.Split(blob.Digest, ":")[1])
-		if err != nil {
-			return err
-		}
-		err = untar(f, toPath, label)
-		if err != nil {
-			return err
-		}
+	} else {
+		o.Log.Info("extract directory exists (nop)")
 	}
 	return nil
 }

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/manifest"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 )
 
 type BatchInterface interface {
-	Worker(ctx context.Context, images []string, opts mirror.CopyOptions) error
+	Worker(ctx context.Context, images []v1alpha3.CopyImageSchema, opts mirror.CopyOptions) error
 }
 
 func New(log clog.PluggableLoggerInterface,
@@ -49,7 +49,7 @@ type BatchSchema struct {
 }
 
 // Worker - the main batch processor
-func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOptions) error {
+func (o *Batch) Worker(ctx context.Context, images []v1alpha3.CopyImageSchema, opts mirror.CopyOptions) error {
 
 	var errArray []error
 	var wg sync.WaitGroup
@@ -83,18 +83,14 @@ func (o *Batch) Worker(ctx context.Context, images []string, opts mirror.CopyOpt
 		o.Log.Info(fmt.Sprintf("starting batch %d ", i))
 		for x := 0; x < b.BatchSize; x++ {
 			index := (i * b.BatchSize) + x
-			hld := strings.Split(images[index], "*")
-			if len(hld) == 0 {
-				return fmt.Errorf("the source and destination selector is missing")
-			}
-			o.Log.Debug("destination %s ", hld[1])
+			o.Log.Debug("destination %s ", images[index].Destination)
 			go func(ctx context.Context, src, dest string, opts *mirror.CopyOptions, writer bufio.Writer) {
 				defer wg.Done()
 				err := o.Mirror.Run(ctx, src, dest, "copy", opts, writer)
 				if err != nil {
 					errArray = append(errArray, err)
 				}
-			}(ctx, hld[0], hld[1], &opts, *writer)
+			}(ctx, images[index].Source, images[index].Destination, &opts, *writer)
 		}
 		wg.Wait()
 		// rather than use defer Close we intentianally close the log files

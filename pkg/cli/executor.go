@@ -10,25 +10,31 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 
 	"github.com/google/uuid"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/additional"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/batch"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/config"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/diff"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/operator"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/release"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/additional"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/batch"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/config"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/diff"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/manifest"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/operator"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/release"
 	"github.com/spf13/cobra"
 )
 
 const (
-	dockerProtocol  string = "docker://"
-	ociProtocol     string = "oci://"
-	diskToMirror    string = "diskToMirror"
-	mirrorToDisk    string = "mirrorToDisk"
-	releaseImageDir string = "release-images"
+	dockerProtocol          string = "docker://"
+	ociProtocol             string = "oci://"
+	diskToMirror            string = "diskToMirror"
+	mirrorToDisk            string = "mirrorToDisk"
+	releaseImageDir         string = "release-images"
+	logsDir                 string = "logs"
+	workingDir              string = "working-dir"
+	additionalImages        string = "additional-images"
+	releaseImageExtractDir  string = "hold-release"
+	operatorImageExtractDir string = "hold-operator"
 )
 
 var (
@@ -50,14 +56,6 @@ var (
 		oc-mirror oci:mirror --config mirror-config.yaml
 		`,
 	)
-)
-
-const (
-	logsDir                 string = "logs/"
-	workingDir              string = "working-dir/"
-	additionalImages        string = "additional-images"
-	releaseImageExtractDir  string = "hold-release"
-	operatorImageExtractDir string = "hold-operator"
 )
 
 type ExecutorSchema struct {
@@ -147,6 +145,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 
 	// clean up logs directory
 	os.RemoveAll(logsDir)
+
 	// ensure working dir exists
 	err := os.MkdirAll(workingDir, 0755)
 	if err != nil {
@@ -177,11 +176,14 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var allRelatedImages []string
+	var allRelatedImages []v1alpha3.CopyImageSchema
 
 	// check if we need to copy or mirror
 	// check if there is a change if so then continue as normal else
 	// report that there is nothing to do (all up to date)
+
+	/* disable diff for now
+
 	_, prevCfg, err := o.Diff.GetAllMetadata(o.Opts.Global.Dir)
 	if err != nil {
 		o.Log.Error("%v", err)
@@ -191,16 +193,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 		o.Log.Error("%v", err)
 	}
 
-	// check if there has been a change in the imagesetconfig
-	// between a copy and mirror - it should not be changed
-	if o.Opts.Mode == diskToMirror && res && !o.Opts.Global.Force {
-		return fmt.Errorf("imagesetconfig should not be changed (from copy)")
-	}
-
-	if !res && !o.Opts.Global.Force {
-		o.Log.Info("no change detected for copy and mirror")
-		return nil
-	}
+	*/
 
 	// do releases
 	imgs, err := o.Release.ReleaseImageCollector(cmd.Context())
@@ -234,12 +227,15 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	/* disabled
 	// only execute if mode is diskToMirror
 	err = o.Diff.DeleteImages(cmd.Context())
 	if err != nil {
 		o.Log.Error("%v", err)
 	}
+	*/
 	return nil
+
 }
 
 // Complete - do the final setup of modules
@@ -266,11 +262,11 @@ func (o *ExecutorSchema) Complete(args []string) {
 	var dest string
 	if strings.Contains(args[0], ociProtocol) {
 		o.Opts.Mode = mirrorToDisk
-		dest = workingDir + strings.Split(args[0], ociProtocol)[1]
+		dest = workingDir + "/" + strings.Split(args[0], ociProtocol)[1]
 		o.Log.Debug("destination %s ", dest)
 	} else if strings.Contains(args[0], dockerProtocol) {
 		o.Opts.Mode = diskToMirror
-		dest = workingDir + o.Opts.Global.From
+		dest = workingDir + "/" + o.Opts.Global.From
 		o.Log.Debug("destination %s ", dest)
 	}
 	o.Opts.Destination = args[0]
@@ -278,7 +274,9 @@ func (o *ExecutorSchema) Complete(args []string) {
 	o.Log.Info("mode %s ", o.Opts.Mode)
 
 	client, _ := release.NewOCPClient(uuid.New())
-	cn := release.NewCincinnati(o.Log, &o.Config, &o.Opts, client, false)
+
+	signature := release.NewSignatureClient(o.Log, &o.Config, &o.Opts)
+	cn := release.NewCincinnati(o.Log, &o.Config, &o.Opts, client, false, signature)
 	o.Release = release.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest, cn)
 	o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
 	o.AdditionalImages = additional.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
@@ -296,7 +294,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 			},
 		}
 		seq := diff.Sequence{Item: item}
-		metadata = diff.SequenceSchema{Title: "golang-oci-mirror", Owner: "CFE-EAMA", Sequence: seq}
+		metadata = diff.SequenceSchema{Title: "golang-fb-mirror", Owner: "CFE-EAMA", Sequence: seq}
 		o.Log.Info("added new metadata %v ", metadata)
 		err := o.Diff.WriteMetadata(o.Opts.Global.ConfigPath, dest, metadata, o.Config)
 		if err != nil {
@@ -324,7 +322,7 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 
 // mergeImages - simple function to append releated images
 // nolint
-func mergeImages(base, in []string) []string {
+func mergeImages(base, in []v1alpha3.CopyImageSchema) []v1alpha3.CopyImageSchema {
 	for _, img := range in {
 		base = append(base, img)
 	}

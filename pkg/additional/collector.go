@@ -2,17 +2,18 @@ package additional
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha2"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/api/v1alpha3"
-	clog "github.com/lmzuccarelli/golang-oci-mirror/pkg/log"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/manifest"
-	"github.com/lmzuccarelli/golang-oci-mirror/pkg/mirror"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha2"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/api/v1alpha3"
+	clog "github.com/lmzuccarelli/golang-fb-mirror/pkg/log"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/manifest"
+	"github.com/lmzuccarelli/golang-fb-mirror/pkg/mirror"
 )
 
 const (
@@ -31,7 +32,7 @@ const (
 )
 
 type CollectorInterface interface {
-	AdditionalImagesCollector(ctx context.Context) ([]string, error)
+	AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.CopyImageSchema, error)
 }
 
 func New(log clog.PluggableLoggerInterface,
@@ -54,25 +55,33 @@ type Collector struct {
 // AdditionalImagesCollector - this looks into the additional images field
 // taking into account the mode we are in (mirrorToDisk, diskToMirror)
 // the image is downloaded in oci format
-func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, error) {
+func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.CopyImageSchema, error) {
 
-	var allImages []string
+	var allImages []v1alpha3.CopyImageSchema
 	if !strings.Contains(o.Opts.Destination, ociProtocol) && !strings.Contains(o.Opts.Destination, dockerProtocol) {
-		return []string{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
+		return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
 	}
 
 	if o.Opts.Mode == mirrorToDisk {
 		for _, img := range o.Config.ImageSetConfigurationSpec.Mirror.AdditionalImages {
 			irs, err := customImageParser(img.Name)
-			o.Log.Debug("%v", irs)
 			if err != nil {
-				return []string{}, nil
+				return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, err)
 			}
-			src := dockerProtocol + img.Name
-			dest := ociProtocolTrimmed + o.Opts.Global.Dir + "/" + additionalImagesDir + "/" + irs.Component
-			o.Log.Trace("source %s", src)
-			o.Log.Trace("destination %s", dest)
-			allImages = append(allImages, src+"*"+dest)
+			cacheDir := strings.Join([]string{o.Opts.Global.Dir, additionalImagesDir, irs.Namespace, irs.Component}, "/")
+			if _, err := os.Stat(cacheDir); errors.Is(err, os.ErrNotExist) {
+				err := os.MkdirAll(cacheDir, 0755)
+				if err != nil {
+					return []v1alpha3.CopyImageSchema{}, nil
+				}
+				src := dockerProtocol + img.Name
+				dest := ociProtocolTrimmed + cacheDir
+				o.Log.Debug("source %s", src)
+				o.Log.Debug("destination %s", dest)
+				allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
+			} else {
+				o.Log.Info("cache dir exists %s", cacheDir)
+			}
 		}
 	}
 
@@ -81,7 +90,8 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, er
 		if e != nil {
 			o.Log.Error("%v", e)
 		}
-		e = filepath.Walk(workingDir+"/"+o.Opts.Global.From+"/"+additionalImagesDir, func(path string, info os.FileInfo, err error) error {
+		copyDir := strings.Join([]string{o.Opts.Global.From, additionalImagesDir}, "/")
+		e = filepath.Walk(copyDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {
 				ns := strings.Split(filepath.Dir(path), additionalImagesDir)
 				if len(ns) == 0 {
@@ -91,15 +101,15 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]string, er
 					if len(name) != 2 {
 						return fmt.Errorf(errMsg+" %s ", "additional images name and related compents are incorrect", name)
 					}
-					src := strings.Trim(ociProtocol, "/") + ns[0] + additionalImagesDir + "/" + name[1]
+					src := ociProtocolTrimmed + strings.Join([]string{ns[0], additionalImagesDir, name[1]}, "/")
 					dest := o.Opts.Destination + "/" + name[1]
-					allImages = append(allImages, src+"*"+dest)
+					allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
 				}
 			}
 			return nil
 		})
 		if e != nil {
-			return []string{}, e
+			return []v1alpha3.CopyImageSchema{}, e
 		}
 	}
 	return allImages, nil

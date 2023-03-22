@@ -261,3 +261,25 @@ type ImageRefSchema struct {
 	Namespace  string
 	Component  string
 }
+
+// CopyImageSchema
+type CopyImageSchema struct {
+	Source      string
+	Destination string
+}
+
+// SignatureContentSchema
+type SignatureContentSchema struct {
+	Critical struct {
+		Image struct {
+			DockerManifestDigest string `json:"docker-manifest-digest"`
+		} `json:"image"`
+		Type     string `json:"type"`
+		Identity struct {
+			DockerReference string `json:"docker-reference"`
+		} `json:"identity"`
+	} `json:"critical"`
+	Optional struct {
+		Creator string `json:"creator"`
+	} `json:"optional"`
+}
