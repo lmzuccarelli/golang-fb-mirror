@@ -90,21 +90,13 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.C
 		if e != nil {
 			o.Log.Error("%v", e)
 		}
-		copyDir := strings.Join([]string{o.Opts.Global.From, additionalImagesDir}, "/")
-		e = filepath.Walk(copyDir, func(path string, info os.FileInfo, err error) error {
+		e = filepath.Walk(o.Opts.Global.AdditionalFrom, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {
-				ns := strings.Split(filepath.Dir(path), additionalImagesDir)
-				if len(ns) == 0 {
-					return fmt.Errorf(errMsg+"%s", "no directory found for additional-images ", path)
-				} else {
-					name := strings.Split(ns[1], "/")
-					if len(name) != 2 {
-						return fmt.Errorf(errMsg+" %s ", "additional images name and related compents are incorrect", name)
-					}
-					src := ociProtocolTrimmed + strings.Join([]string{ns[0], additionalImagesDir, name[1]}, "/")
-					dest := o.Opts.Destination + "/" + name[1]
-					allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
-				}
+				hld := strings.Split(filepath.Dir(path), additionalImagesDir)
+				ref := filepath.Dir(strings.Join(hld, "/"))
+				src := ociProtocolTrimmed + filepath.Dir(path)
+				dest := o.Opts.Destination + "/" + ref
+				allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
 			}
 			return nil
 		})

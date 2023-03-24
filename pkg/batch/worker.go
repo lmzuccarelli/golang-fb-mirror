@@ -83,6 +83,7 @@ func (o *Batch) Worker(ctx context.Context, images []v1alpha3.CopyImageSchema, o
 		o.Log.Info(fmt.Sprintf("starting batch %d ", i))
 		for x := 0; x < b.BatchSize; x++ {
 			index := (i * b.BatchSize) + x
+			o.Log.Debug("source %s ", images[index].Source)
 			o.Log.Debug("destination %s ", images[index].Destination)
 			go func(ctx context.Context, src, dest string, opts *mirror.CopyOptions, writer bufio.Writer) {
 				defer wg.Done()

@@ -27,6 +27,7 @@ import (
 const (
 	dockerProtocol          string = "docker://"
 	ociProtocol             string = "oci://"
+	fileProtocol            string = "file://"
 	diskToMirror            string = "diskToMirror"
 	mirrorToDisk            string = "mirrorToDisk"
 	releaseImageDir         string = "release-images"
@@ -129,7 +130,9 @@ func NewMirrorCmd(log clog.PluggableLoggerInterface) *cobra.Command {
 	cmd.PersistentFlags().StringVar(&opts.Global.ConfigPath, "config", "", "Path to imageset configuration file")
 	cmd.Flags().StringVar(&opts.Global.LogLevel, "loglevel", "info", "Log level one of (info, debug, trace, error)")
 	cmd.Flags().StringVar(&opts.Global.Dir, "dir", "working-dir", "Assets directory")
-	cmd.Flags().StringVar(&opts.Global.From, "from", "", "directory used when doing the oci: (mirrorToDisk) mode")
+	cmd.Flags().StringVar(&opts.Global.ReleaseFrom, "release-from", "", "directory used when doing mirrorToDisk mode for release images")
+	cmd.Flags().StringVar(&opts.Global.OperatorsFrom, "operators-from", "", "directory used when doing mirrorToDisk mode for operator images")
+	cmd.Flags().StringVar(&opts.Global.AdditionalFrom, "additional-from", "", "directory used when doing mirrorToDisk mode for additional images")
 	cmd.Flags().BoolVarP(&opts.Global.Quiet, "quiet", "q", false, "enable detailed logging when copying images")
 	cmd.Flags().BoolVarP(&opts.Global.Force, "force", "f", false, "force the copy and mirror functionality")
 	cmd.Flags().AddFlagSet(&flagSharedOpts)
@@ -260,14 +263,13 @@ func (o *ExecutorSchema) Complete(args []string) {
 
 	// logic to check mode
 	var dest string
-	if strings.Contains(args[0], ociProtocol) {
+	if strings.Contains(args[0], ociProtocol) || strings.Contains(args[0], fileProtocol) {
 		o.Opts.Mode = mirrorToDisk
-		dest = workingDir + "/" + strings.Split(args[0], ociProtocol)[1]
+		dest = workingDir + "/" + strings.Split(args[0], "://")[1]
 		o.Log.Debug("destination %s ", dest)
-	} else if strings.Contains(args[0], dockerProtocol) {
+	} else {
+		dest = workingDir
 		o.Opts.Mode = diskToMirror
-		dest = workingDir + "/" + o.Opts.Global.From
-		o.Log.Debug("destination %s ", dest)
 	}
 	o.Opts.Destination = args[0]
 	o.Opts.Global.Dir = dest
@@ -310,14 +312,18 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 	if len(o.Opts.Global.ConfigPath) == 0 && strings.Contains(dest[0], ociProtocol) {
 		return fmt.Errorf("use the --config flag when using oci: protocol")
 	}
-	if len(o.Opts.Global.From) == 0 && strings.Contains(dest[0], dockerProtocol) {
-		return fmt.Errorf("use the --from flag when using docker: protocol")
+	if len(o.Opts.Global.ReleaseFrom) == 0 && strings.Contains(dest[0], dockerProtocol) {
+		return fmt.Errorf("use the --release-from flag when using docker: protocol")
+	}
+	if len(o.Opts.Global.OperatorsFrom) == 0 && strings.Contains(dest[0], dockerProtocol) {
+		return fmt.Errorf("use the --operators-from flag when using docker: protocol")
 	}
 	if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dockerProtocol) {
 		return nil
 	} else {
 		return fmt.Errorf("destination must have either oci:// or docker:// protocol prefixes")
 	}
+
 }
 
 // mergeImages - simple function to append releated images

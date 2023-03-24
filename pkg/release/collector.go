@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	indexJson                   string = "index.json"
+	indexJson                   string = "manifest.json"
 	operatorImageExtractDir     string = "hold-operator"
 	workingDir                  string = "working-dir"
 	dockerProtocol              string = "docker://"
@@ -163,39 +163,43 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 		}
 	}
 	if o.Opts.Mode == diskToMirror {
-		if len(o.Opts.Global.From) == 0 {
-			return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, "in diskToMirror mode please use the --from flag")
-		}
-		// check the directory to copy
-		regex, e := regexp.Compile(indexJson)
-		if e != nil {
-			o.Log.Error(errMsg, e)
-		}
+		// we know the directory format is
+		// release-images/name/version/images
+		// we can do some replacing from the directory passed as string
+		str := strings.Replace(o.Opts.Global.ReleaseFrom, "release-images", "hold-release", 1)
+		str = strings.Replace(str, "images", "release-manifests", 1)
+
 		// get all release images from manifest (json)
-		allRelatedImages, err := o.Manifest.GetReleaseSchema(o.Opts.Global.Dir + releaseImageExtractFullPath)
+		allRelatedImages, err := o.Manifest.GetReleaseSchema(str + "/" + imageReferences)
 		if err != nil {
 			return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, err)
 		}
 
-		e = filepath.Walk(o.Opts.Global.Dir+releaseImageDir, func(path string, info os.FileInfo, err error) error {
+		// set up a regex for the manifest.json (checked in each directory)
+		regex, e := regexp.Compile(indexJson)
+		if e != nil {
+			o.Log.Error("%v", e)
+		}
+
+		// walk through the directory structure to look for manifest.json files
+		// get the base directory and do a lookup on the actual image to mirror
+		errFP := filepath.Walk(o.Opts.Global.ReleaseFrom, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {
-				ns := strings.Split(filepath.Dir(path), releaseImageDir)
-				if len(ns) == 0 {
-					return fmt.Errorf(errMsg, "no directory found for release-images - please verify")
-				} else {
-					name := strings.Split(ns[1], "/")
-					if len(name) != 2 {
-						return fmt.Errorf(errMsg+" %s ", "release image name and related compents are incorrect", name)
-					}
-					img := findRelatedImage(name[1], allRelatedImages)
-					src := fileProtocolTrimmed + ns[0] + releaseImageDir + "/" + name[1]
+				component := strings.Split(filepath.Dir(path), "/")
+				img := findRelatedImage(component[len(component)-1], allRelatedImages)
+				if len(img) > 0 {
+					src := fileProtocolTrimmed + filepath.Dir(path)
 					dest := o.Opts.Destination + "/" + img
 					allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
+				} else {
+					o.Log.Warn("component not found %s", component[len(component)-1])
 				}
+			} else if err != nil {
+				return err
 			}
 			return nil
 		})
-		if e != nil {
+		if errFP != nil {
 			return []v1alpha3.CopyImageSchema{}, e
 		}
 	}
