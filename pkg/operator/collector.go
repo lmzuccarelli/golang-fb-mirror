@@ -85,7 +85,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.Copy
 		for _, pkg := range ops.Packages {
 			o.Log.Info("catalog packages: %s \n", pkg.Name)
 			for _, channel := range pkg.Channels {
-				compare[pkg.Name] = v1alpha3.ISCPackage{Channel: channel.Name, MinVersion: channel.MinVersion, MaxVersion: channel.MaxVersion}
+				compare[pkg.Name] = v1alpha3.ISCPackage{Channel: channel.Name, MinVersion: channel.MinVersion, MaxVersion: channel.MaxVersion, Full: ops.Full}
 				o.Log.Info("channels: %v \n", compare)
 			}
 		}

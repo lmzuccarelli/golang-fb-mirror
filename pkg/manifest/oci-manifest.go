@@ -309,9 +309,13 @@ func getRelatedImageByFilter(log clog.PluggableLoggerInterface, olm []v1alpha3.D
 				bundles[name] = true
 			}
 		case obj.Schema == "olm.bundle":
-			if bundles[obj.Name] {
+			if bundles[obj.Name] && !pkg.Full {
 				log.Debug("config bundle: %d %v", i, obj.Name)
 				log.Trace("config relatedImages: %d %v", i, obj.RelatedImages)
+				relatedImages[obj.Name] = obj.RelatedImages
+			}
+			// add all bundles
+			if pkg.Full {
 				relatedImages[obj.Name] = obj.RelatedImages
 			}
 		case obj.Schema == "olm.package":

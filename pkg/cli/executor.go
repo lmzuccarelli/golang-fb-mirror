@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
+	//"time"
 
 	"k8s.io/kubectl/pkg/util/templates"
 
@@ -36,6 +36,7 @@ const (
 	additionalImages        string = "additional-images"
 	releaseImageExtractDir  string = "hold-release"
 	operatorImageExtractDir string = "hold-operator"
+	signaturesDir           string = "signatures"
 )
 
 var (
@@ -163,6 +164,22 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// create signatures directory
+	o.Log.Trace("creating signatures directory %s ", o.Opts.Global.Dir+"/"+signaturesDir)
+	err = os.MkdirAll(o.Opts.Global.Dir+"/"+signaturesDir, 0755)
+	if err != nil {
+		o.Log.Error(" %v ", err)
+		return err
+	}
+
+	// create release-images directory
+	o.Log.Trace("creating release images directory %s ", o.Opts.Global.Dir+"/"+releaseImageDir)
+	err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageDir, 0755)
+	if err != nil {
+		o.Log.Error(" %v ", err)
+		return err
+	}
+
 	// create release cache dir
 	o.Log.Trace("creating release cache directory %s ", o.Opts.Global.Dir+"/"+releaseImageExtractDir)
 	err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageExtractDir, 0755)
@@ -181,26 +198,10 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 
 	var allRelatedImages []v1alpha3.CopyImageSchema
 
-	// check if we need to copy or mirror
-	// check if there is a change if so then continue as normal else
-	// report that there is nothing to do (all up to date)
-
-	/* disable diff for now
-
-	_, prevCfg, err := o.Diff.GetAllMetadata(o.Opts.Global.Dir)
-	if err != nil {
-		o.Log.Error("%v", err)
-	}
-	res, err := o.Diff.CheckDiff(prevCfg)
-	if err != nil {
-		o.Log.Error("%v", err)
-	}
-
-	*/
-
 	// do releases
 	imgs, err := o.Release.ReleaseImageCollector(cmd.Context())
 	if err != nil {
+		cleanUp()
 		return err
 	}
 	o.Log.Info("total release images to copy %d ", len(imgs))
@@ -210,6 +211,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	// do operators
 	imgs, err = o.Operator.OperatorImageCollector(cmd.Context())
 	if err != nil {
+		cleanUp()
 		return err
 	}
 	o.Log.Info("total operator images to copy %d ", len(imgs))
@@ -219,6 +221,7 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	// do additionalImages
 	imgs, err = o.AdditionalImages.AdditionalImagesCollector(cmd.Context())
 	if err != nil {
+		cleanUp()
 		return err
 	}
 	o.Log.Info("total additional images to copy %d ", len(imgs))
@@ -227,18 +230,11 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	//call the batch worker
 	err = o.Batch.Worker(cmd.Context(), allRelatedImages, o.Opts)
 	if err != nil {
+		cleanUp()
 		return err
 	}
 
-	/* disabled
-	// only execute if mode is diskToMirror
-	err = o.Diff.DeleteImages(cmd.Context())
-	if err != nil {
-		o.Log.Error("%v", err)
-	}
-	*/
 	return nil
-
 }
 
 // Complete - do the final setup of modules
@@ -282,29 +278,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 	o.Release = release.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest, cn)
 	o.Operator = operator.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
 	o.AdditionalImages = additional.New(o.Log, o.Config, o.Opts, o.Mirror, o.Manifest)
-	o.Diff = diff.New(o.Log, o.Config, o.Opts, o.Mirror)
 
-	metadata, _, err := o.Diff.GetAllMetadata(dest)
-	if err != nil {
-		// if no previous imagesetconfig was found create new one
-		item := []diff.Item{
-			{
-				Value:       0,
-				Current:     true,
-				Timestamp:   time.Now().Unix(),
-				Destination: dest,
-			},
-		}
-		seq := diff.Sequence{Item: item}
-		metadata = diff.SequenceSchema{Title: "golang-fb-mirror", Owner: "CFE-EAMA", Sequence: seq}
-		o.Log.Info("added new metadata %v ", metadata)
-		err := o.Diff.WriteMetadata(o.Opts.Global.ConfigPath, dest, metadata, o.Config)
-		if err != nil {
-			o.Log.Error("%v", err)
-		}
-	}
-	o.MetaData = metadata
-	o.Log.Info("metadata %v ", metadata)
 }
 
 // Validate - cobra validation
@@ -333,4 +307,12 @@ func mergeImages(base, in []v1alpha3.CopyImageSchema) []v1alpha3.CopyImageSchema
 		base = append(base, img)
 	}
 	return base
+}
+
+// cleanUp - utility to clean directories
+func cleanUp() {
+	// clean up logs directory
+	os.RemoveAll(logsDir)
+	os.RemoveAll(workingDir)
+
 }

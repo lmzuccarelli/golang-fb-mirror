@@ -368,7 +368,7 @@ func (o *SignatureSchema) GenerateReleaseSignatures(ctx context.Context, rd []v1
 			}
 		}
 
-		o.Log.Info("signature found in cache %s", digest)
+		o.Log.Info("signature %s", digest)
 
 		// we have the current digest in cache
 		if len(data) == 0 {

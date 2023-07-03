@@ -253,6 +253,7 @@ type ISCPackage struct {
 	Channel    string
 	MinVersion string
 	MaxVersion string
+	Full       bool
 }
 
 // ImageRefSchema used to return parsed Image data

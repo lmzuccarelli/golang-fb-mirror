@@ -89,9 +89,9 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 			imageIndexDir = strings.Replace(hld[len(hld)-1], ":", "/", -1)
 			cacheDir := strings.Join([]string{o.Opts.Global.Dir, releaseImageExtractDir, imageIndexDir}, "/")
 			dir := strings.Join([]string{o.Opts.Global.Dir, releaseImageDir, imageIndexDir}, "/")
-			if _, err := os.Stat(cacheDir); errors.Is(err, os.ErrNotExist) {
+			if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 				o.Log.Info("copying image %s ", value.Source)
-				err := os.MkdirAll(cacheDir, 0755)
+				err := os.MkdirAll(dir, 0755)
 				if err != nil {
 					return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, err)
 				}
