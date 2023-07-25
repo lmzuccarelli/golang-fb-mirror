@@ -9,8 +9,8 @@ import (
 	"strconv"
 
 	"github.com/containers/common/pkg/retry"
-	"github.com/containers/image/manifest"
 	"github.com/containers/image/v5/copy"
+	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/pkg/cli"
 	"github.com/containers/image/v5/signature"
 	"github.com/containers/image/v5/transports/alltransports"
