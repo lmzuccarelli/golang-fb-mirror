@@ -69,10 +69,28 @@ mirror:
 For the disk-to-mirror use case 
 
 ```bash
-build/mirror docker://localhost.localdomain:5000/testlmz --release-from working-dir/test-lmz/release-images/ocp-release/4.12.0-x86_64/images/ \
---operators-from working-dir/test-lmz/operator-images/redhat-operator-index/v4.12/ \
---additional-from working-dir/test-lmz/additional-images/ --loglevel debug
 
+# cli
+
+mirror docker://localhost:5000/test --config isc-mirror.yaml --loglevel trace
+
+# imagesetconfig used
+
+---
+apiVersion: mirror.openshift.io/v1alpha2
+kind: ImageSetConfiguration
+mirror:
+  platform:
+    release: file:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/release-images/ocp-release/4.12.0-x86_64
+  operators:
+    - catalog: file:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/operator-images/redhat-operator-index/v4.12
+      packages:
+      - name: aws-load-balancer-operator
+        channels: 
+        - name: stable-v0
+  additionalImages: 
+    - name: file:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/additional-images
+    
 ```
 
 ## Profiling 
