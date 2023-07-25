@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	//"time"
 
 	"k8s.io/kubectl/pkg/util/templates"
 
@@ -104,7 +103,7 @@ func NewMirrorCmd(log clog.PluggableLoggerInterface) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:           fmt.Sprintf("%v <destination type>:<destination location>", filepath.Base(os.Args[0])),
-		Version:       "v0.0.1",
+		Version:       "v2.0.0-dev-01",
 		Short:         "Manage mirrors per user configuration",
 		Long:          mirrorlongDesc,
 		Example:       mirrorExamples,
@@ -131,9 +130,9 @@ func NewMirrorCmd(log clog.PluggableLoggerInterface) *cobra.Command {
 	cmd.PersistentFlags().StringVar(&opts.Global.ConfigPath, "config", "", "Path to imageset configuration file")
 	cmd.Flags().StringVar(&opts.Global.LogLevel, "loglevel", "info", "Log level one of (info, debug, trace, error)")
 	cmd.Flags().StringVar(&opts.Global.Dir, "dir", "working-dir", "Assets directory")
-	cmd.Flags().StringVar(&opts.Global.ReleaseFrom, "release-from", "", "directory used when doing mirrorToDisk mode for release images")
-	cmd.Flags().StringVar(&opts.Global.OperatorsFrom, "operators-from", "", "directory used when doing mirrorToDisk mode for operator images")
-	cmd.Flags().StringVar(&opts.Global.AdditionalFrom, "additional-from", "", "directory used when doing mirrorToDisk mode for additional images")
+	//cmd.Flags().StringVar(&opts.Global.ReleaseFrom, "release-from", "", "directory used when doing mirrorToDisk mode for release images")
+	//cmd.Flags().StringVar(&opts.Global.OperatorsFrom, "operators-from", "", "directory used when doing mirrorToDisk mode for operator images")
+	//cmd.Flags().StringVar(&opts.Global.AdditionalFrom, "additional-from", "", "directory used when doing mirrorToDisk mode for additional images")
 	cmd.Flags().BoolVarP(&opts.Global.Quiet, "quiet", "q", false, "enable detailed logging when copying images")
 	cmd.Flags().BoolVarP(&opts.Global.Force, "force", "f", false, "force the copy and mirror functionality")
 	cmd.Flags().AddFlagSet(&flagSharedOpts)
@@ -150,50 +149,52 @@ func (o *ExecutorSchema) Run(cmd *cobra.Command, args []string) error {
 	// clean up logs directory
 	os.RemoveAll(logsDir)
 
-	// ensure working dir exists
-	err := os.MkdirAll(workingDir, 0755)
-	if err != nil {
-		o.Log.Error(" %v ", err)
-		return err
-	}
-
 	// create logs directory
-	err = os.MkdirAll(logsDir, 0755)
+	err := os.MkdirAll(logsDir, 0755)
 	if err != nil {
 		o.Log.Error(" %v ", err)
 		return err
 	}
 
-	// create signatures directory
-	o.Log.Trace("creating signatures directory %s ", o.Opts.Global.Dir+"/"+signaturesDir)
-	err = os.MkdirAll(o.Opts.Global.Dir+"/"+signaturesDir, 0755)
-	if err != nil {
-		o.Log.Error(" %v ", err)
-		return err
-	}
+	if o.Opts.Mode == mirrorToDisk {
+		// ensure working dir exists
+		err := os.MkdirAll(workingDir, 0755)
+		if err != nil {
+			o.Log.Error(" %v ", err)
+			return err
+		}
 
-	// create release-images directory
-	o.Log.Trace("creating release images directory %s ", o.Opts.Global.Dir+"/"+releaseImageDir)
-	err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageDir, 0755)
-	if err != nil {
-		o.Log.Error(" %v ", err)
-		return err
-	}
+		// create signatures directory
+		o.Log.Trace("creating signatures directory %s ", o.Opts.Global.Dir+"/"+signaturesDir)
+		err = os.MkdirAll(o.Opts.Global.Dir+"/"+signaturesDir, 0755)
+		if err != nil {
+			o.Log.Error(" %v ", err)
+			return err
+		}
 
-	// create release cache dir
-	o.Log.Trace("creating release cache directory %s ", o.Opts.Global.Dir+"/"+releaseImageExtractDir)
-	err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageExtractDir, 0755)
-	if err != nil {
-		o.Log.Error(" %v ", err)
-		return err
-	}
+		// create release-images directory
+		o.Log.Trace("creating release images directory %s ", o.Opts.Global.Dir+"/"+releaseImageDir)
+		err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageDir, 0755)
+		if err != nil {
+			o.Log.Error(" %v ", err)
+			return err
+		}
 
-	// create operator cache dir
-	o.Log.Trace("creating operator cache directory %s ", o.Opts.Global.Dir+"/"+operatorImageExtractDir)
-	err = os.MkdirAll(o.Opts.Global.Dir+"/"+operatorImageExtractDir, 0755)
-	if err != nil {
-		o.Log.Error(" %v ", err)
-		return err
+		// create release cache dir
+		o.Log.Trace("creating release cache directory %s ", o.Opts.Global.Dir+"/"+releaseImageExtractDir)
+		err = os.MkdirAll(o.Opts.Global.Dir+"/"+releaseImageExtractDir, 0755)
+		if err != nil {
+			o.Log.Error(" %v ", err)
+			return err
+		}
+
+		// create operator cache dir
+		o.Log.Trace("creating operator cache directory %s ", o.Opts.Global.Dir+"/"+operatorImageExtractDir)
+		err = os.MkdirAll(o.Opts.Global.Dir+"/"+operatorImageExtractDir, 0755)
+		if err != nil {
+			o.Log.Error(" %v ", err)
+			return err
+		}
 	}
 
 	var allRelatedImages []v1alpha3.CopyImageSchema
@@ -283,24 +284,40 @@ func (o *ExecutorSchema) Complete(args []string) {
 
 // Validate - cobra validation
 func (o *ExecutorSchema) Validate(dest []string) error {
-	if len(o.Opts.Global.ConfigPath) == 0 && strings.Contains(dest[0], ociProtocol) {
-		return fmt.Errorf("use the --config flag when using oci: protocol")
-	}
-	if len(o.Opts.Global.ReleaseFrom) == 0 && strings.Contains(dest[0], dockerProtocol) {
-		return fmt.Errorf("use the --release-from flag when using docker: protocol")
-	}
-	if len(o.Opts.Global.OperatorsFrom) == 0 && strings.Contains(dest[0], dockerProtocol) {
-		return fmt.Errorf("use the --operators-from flag when using docker: protocol")
-	}
-	if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dockerProtocol) {
-		return nil
-	} else {
-		return fmt.Errorf("destination must have either oci:// or docker:// protocol prefixes")
+	if len(o.Opts.Global.ConfigPath) == 0 {
+		return fmt.Errorf("use the --config flag it is mandatory")
 	}
 
+	if strings.Contains(dest[0], dockerProtocol) {
+		// read the ImageSetConfiguration
+		cfg, err := config.ReadConfig(o.Opts.Global.ConfigPath)
+		if err != nil {
+			return err
+		}
+		if len(cfg.Mirror.Platform.Release) == 0 {
+			return fmt.Errorf("ensure the release field is set and has file:// prefix")
+		}
+		for _, x := range cfg.Mirror.Operators {
+			if !strings.Contains(x.Catalog, fileProtocol) {
+				return fmt.Errorf("ensure the catalog field has a file:// prefix")
+			}
+		}
+		for _, x := range cfg.Mirror.AdditionalImages {
+			if !strings.Contains(x.Name, fileProtocol) {
+				return fmt.Errorf("ensure the additional name field is set and has file:// prefix")
+			}
+		}
+		if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dockerProtocol) {
+			return nil
+		} else {
+			return fmt.Errorf("destination must have either oci:// or docker:// protocol prefixes")
+		}
+
+	}
+	return nil
 }
 
-// mergeImages - simple function to append releated images
+// mergeImages - simple function to append related images
 // nolint
 func mergeImages(base, in []v1alpha3.CopyImageSchema) []v1alpha3.CopyImageSchema {
 	for _, img := range in {
@@ -313,6 +330,6 @@ func mergeImages(base, in []v1alpha3.CopyImageSchema) []v1alpha3.CopyImageSchema
 func cleanUp() {
 	// clean up logs directory
 	os.RemoveAll(logsDir)
-	os.RemoveAll(workingDir)
+	//os.RemoveAll(workingDir)
 
 }

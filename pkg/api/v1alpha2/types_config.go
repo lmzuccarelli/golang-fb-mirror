@@ -60,6 +60,9 @@ type Platform struct {
 	// to mirror for the release image. This is defined at the
 	// platform level to enable cross-channel upgrades.
 	Architectures []string `json:"architectures,omitempty"`
+	// This new field will allow the diskToMirror functionality
+	// to copy from a release location on disk
+	Release string `json:"release,omitempty"`
 }
 
 // ReleaseChannel defines the configuration for individual

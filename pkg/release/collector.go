@@ -90,7 +90,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 			cacheDir := strings.Join([]string{o.Opts.Global.Dir, releaseImageExtractDir, imageIndexDir}, "/")
 			dir := strings.Join([]string{o.Opts.Global.Dir, releaseImageDir, imageIndexDir}, "/")
 			if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
-				o.Log.Info("copying image %s ", value.Source)
+				o.Log.Info("copying  %s ", value.Source)
 				err := os.MkdirAll(dir, 0755)
 				if err != nil {
 					return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, err)
@@ -149,10 +149,6 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 				return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, err)
 			}
 
-			// download and verify signatures
-			// TODO: need verification
-			// o.Cincinnati.GenerateReleaseSignatures(ctx, allRelatedImages)
-
 			tmpImages, err := batcWorkerConverter(o.Log, dir, allRelatedImages)
 			if err != nil {
 				return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, err)
@@ -164,13 +160,15 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 	}
 	if o.Opts.Mode == diskToMirror {
 		// we know the directory format is
-		// release-images/name/version/images
+		// release-images/name/version/
 		// we can do some replacing from the directory passed as string
-		str := strings.Replace(o.Opts.Global.ReleaseFrom, "release-images", "hold-release", 1)
-		str = strings.Replace(str, "images", "release-manifests", 1)
+		// so tha twe can access the image-references
+		str := strings.Replace(o.Config.Mirror.Platform.Release, "release-images", "hold-release", 1)
+		// remove the file prefix
+		str = strings.Replace(str, "file://", "", 1)
 
 		// get all release images from manifest (json)
-		allRelatedImages, err := o.Manifest.GetReleaseSchema(str + "/" + imageReferences)
+		allRelatedImages, err := o.Manifest.GetReleaseSchema(str + "/" + releaseImageExtractFullPath)
 		if err != nil {
 			return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, err)
 		}
@@ -183,7 +181,9 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 
 		// walk through the directory structure to look for manifest.json files
 		// get the base directory and do a lookup on the actual image to mirror
-		errFP := filepath.Walk(o.Opts.Global.ReleaseFrom, func(path string, info os.FileInfo, err error) error {
+		imagesDir := strings.Replace(o.Config.Mirror.Platform.Release, "file://", "", 1)
+		imagesDir = imagesDir + "/images"
+		errFP := filepath.Walk(imagesDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {
 				component := strings.Split(filepath.Dir(path), "/")
 				img := findRelatedImage(component[len(component)-1], allRelatedImages)

@@ -90,16 +90,19 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.C
 		if e != nil {
 			o.Log.Error("%v", e)
 		}
-		e = filepath.Walk(o.Opts.Global.AdditionalFrom, func(path string, info os.FileInfo, err error) error {
-			if err == nil && regex.MatchString(info.Name()) {
-				hld := strings.Split(filepath.Dir(path), additionalImagesDir)
-				ref := filepath.Dir(strings.Join(hld, "/"))
-				src := ociProtocolTrimmed + filepath.Dir(path)
-				dest := o.Opts.Destination + "/" + ref
-				allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
-			}
-			return nil
-		})
+		for _, addImg := range o.Config.Mirror.AdditionalImages {
+			imagesDir := strings.Replace(addImg.Name, "file://", "", 1)
+			e = filepath.Walk(imagesDir, func(path string, info os.FileInfo, err error) error {
+				if err == nil && regex.MatchString(info.Name()) {
+					hld := strings.Split(filepath.Dir(path), additionalImagesDir)
+					//ref := filepath.Dir(strings.Join(hld, "/"))
+					src := ociProtocolTrimmed + filepath.Dir(path)
+					dest := o.Opts.Destination + hld[1]
+					allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
+				}
+				return nil
+			})
+		}
 		if e != nil {
 			return []v1alpha3.CopyImageSchema{}, e
 		}

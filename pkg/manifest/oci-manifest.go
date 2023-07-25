@@ -162,8 +162,12 @@ func (o *Manifest) ExtractLayersOCI(fromPath, toPath, label string, oci *v1alpha
 func (o *Manifest) GetReleaseSchema(filePath string) ([]v1alpha3.RelatedImage, error) {
 	var release = v1alpha3.ReleaseSchema{}
 
-	file, _ := os.ReadFile(filePath)
-	err := json.Unmarshal([]byte(file), &release)
+	file, err := os.ReadFile(filePath)
+	if err != nil {
+		return []v1alpha3.RelatedImage{}, err
+	}
+
+	err = json.Unmarshal([]byte(file), &release)
 	if err != nil {
 		return []v1alpha3.RelatedImage{}, err
 	}

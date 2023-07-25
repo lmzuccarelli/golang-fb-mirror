@@ -202,29 +202,32 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.Copy
 	}
 
 	if o.Opts.Mode == diskToMirror {
-		if len(o.Opts.Global.OperatorsFrom) == 0 {
-			return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, "in diskToMirror mode please use the --from flag")
-		}
 		// check the directory to copy
 		regex, e := regexp.Compile(indexJson)
 		if e != nil {
 			o.Log.Error("%v", e)
 		}
-		e = filepath.Walk(o.Opts.Global.OperatorsFrom, func(path string, info os.FileInfo, err error) error {
-			if err == nil && regex.MatchString(info.Name()) {
-				o.Log.Info("path %s", filepath.Dir(path))
-				hld := strings.Split(filepath.Dir(path), operatorImageDir)
-				ref := filepath.Dir(strings.Join(hld, "/"))
-				if len(ref) == 0 {
-					return fmt.Errorf(errMsg+"%s", "no directory found for operator-images ", path)
-				} else {
-					src := ociProtocolTrimmed + filepath.Dir(path)
-					dest := o.Opts.Destination + "/" + ref
-					allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
-				}
+		for _, op := range o.Config.Mirror.Operators {
+			// Need to fix this - incase their are no operators in the ImageSetConfig
+			for _, pkg := range op.Packages {
+				imagesDir := strings.Replace(op.Catalog, "file://", "", 1)
+				e = filepath.Walk(imagesDir, func(path string, info os.FileInfo, err error) error {
+					if err == nil && regex.MatchString(info.Name()) && strings.Contains(path, pkg.Name) {
+						o.Log.Info("path %s", filepath.Dir(path))
+						hld := strings.Split(filepath.Dir(path), operatorImageDir)
+						//ref := filepath.Dir(strings.Join(hld[1], "/"))
+						if len(hld) == 0 {
+							return fmt.Errorf(errMsg+"%s", "no directory found for operator-images ", path)
+						} else {
+							src := ociProtocolTrimmed + filepath.Dir(path)
+							dest := o.Opts.Destination + hld[1]
+							allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
+						}
+					}
+					return nil
+				})
 			}
-			return nil
-		})
+		}
 		if e != nil {
 			return []v1alpha3.CopyImageSchema{}, e
 		}
