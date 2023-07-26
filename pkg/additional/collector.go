@@ -58,9 +58,6 @@ type Collector struct {
 func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.CopyImageSchema, error) {
 
 	var allImages []v1alpha3.CopyImageSchema
-	if !strings.Contains(o.Opts.Destination, ociProtocol) && !strings.Contains(o.Opts.Destination, dockerProtocol) {
-		return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
-	}
 
 	if o.Opts.Mode == mirrorToDisk {
 		for _, img := range o.Config.ImageSetConfigurationSpec.Mirror.AdditionalImages {

@@ -74,11 +74,6 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.Copy
 	compare := make(map[string]v1alpha3.ISCPackage)
 	relatedImages := make(map[string][]v1alpha3.RelatedImage)
 
-	// really not necessary - but doesn't hurt to double check
-	if !strings.Contains(o.Opts.Destination, ociProtocol) && !strings.Contains(o.Opts.Destination, dockerProtocol) {
-		return []v1alpha3.CopyImageSchema{}, fmt.Errorf(errMsg, "destination must use oci:// or docker:// prefix")
-	}
-
 	// compile a map to compare channels,min & max versions
 	for _, ops := range o.Config.Mirror.Operators {
 		o.Log.Info("isc operators: %s\n", ops.Catalog)

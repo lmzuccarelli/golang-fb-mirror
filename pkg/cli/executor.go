@@ -307,10 +307,10 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 				return fmt.Errorf("ensure the additional name field is set and has file:// prefix")
 			}
 		}
-		if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dockerProtocol) {
+		if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dockerProtocol) || strings.Contains(dest[0], fileProtocol) {
 			return nil
 		} else {
-			return fmt.Errorf("destination must have either oci:// or docker:// protocol prefixes")
+			return fmt.Errorf("destination must have either oci://, file:// or docker:// protocol prefixes")
 		}
 
 	}

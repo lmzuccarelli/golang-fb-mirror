@@ -1,6 +1,6 @@
 # Overview
 
-## POC implementation of oci format for mirroring
+## POC implementation of file based images for mirroring
 
 ### Engineering notes
 
@@ -20,7 +20,7 @@ The mirror to disk flow is as follows
 
 #### Catalogs
 
-The mirror to diak flow is as follows
+The mirror to disk flow is as follows
 
 - read imagesetconfig
 - unmarshal imagesetconfig
@@ -29,10 +29,10 @@ The mirror to diak flow is as follows
 - untar layers
 - look for configs/ directory
 - iterate through packages for the catalog
-- look for catalog.sjon (cvo)
+- look for catalog.json (cvo)
 - parse catalog.json
 - compare minVersion,maxVersion, channel from imageset config to unmarshaled struct
-- finid bundle
+- find bundle
 - get releated images
 - download each releated image to disk
    

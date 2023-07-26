@@ -78,9 +78,6 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 		if err != nil {
 			o.Log.Error("[ReleaseImageCollector] %v", err)
 		}
-		if !strings.Contains(o.Opts.Destination, ociProtocol) {
-			return []v1alpha3.CopyImageSchema{}, fmt.Errorf(" [ReleaseImageCollector] destination must use oci: or docker:// prefix")
-		}
 
 		writer := bufio.NewWriter(f)
 		defer f.Close()
