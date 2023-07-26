@@ -25,8 +25,6 @@ const (
 	ociProtocolTrimmed      string = "oci:"
 	dirProtocol             string = "dir://"
 	dirProtocolTrimmed      string = "dir:"
-	fileProtocol            string = "file://"
-	fileProtocolTrimmed     string = "file:"
 	additionalImagesDir     string = "additional-images"
 	blobsDir                string = "/blobs/sha256/"
 	diskToMirror            string = "diskToMirror"
@@ -77,10 +75,6 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.C
 				}
 				src := dockerProtocol + img.Name
 				transport := strings.Split(o.Opts.Destination, "://")[0] + ":"
-				// copy only handles dir: or docker: not file:
-				if transport == fileProtocolTrimmed {
-					transport = dirProtocolTrimmed
-				}
 				dest := transport + cacheDir
 				o.Log.Debug("source %s", src)
 				o.Log.Debug("destination %s", dest)

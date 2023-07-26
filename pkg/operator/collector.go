@@ -28,8 +28,6 @@ const (
 	ociProtocolTrimmed          string = "oci:"
 	dirProtocol                 string = "dir://"
 	dirProtocolTrimmed          string = "dir:"
-	fileProtocol                string = "file://"
-	fileProtocolTrimmed         string = "file:"
 	releaseImageDir             string = "release-images"
 	operatorImageDir            string = "operator-images"
 	releaseImageExtractDir      string = "hold-release"

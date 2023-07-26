@@ -261,7 +261,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 
 	// logic to check mode
 	var dest string
-	if strings.Contains(args[0], ociProtocol) || strings.Contains(args[0], fileProtocol) || strings.Contains(args[0], dirProtocol) {
+	if strings.Contains(args[0], ociProtocol) || strings.Contains(args[0], dirProtocol) {
 		o.Opts.Mode = mirrorToDisk
 		dest = workingDir + "/" + strings.Split(args[0], "://")[1]
 		o.Log.Debug("destination %s ", dest)
@@ -299,16 +299,18 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 			return fmt.Errorf("ensure the release field is set and has file:// prefix")
 		}
 		for _, x := range cfg.Mirror.Operators {
-			if !strings.Contains(x.Catalog, fileProtocol) {
+			if !strings.Contains(x.Catalog, dirProtocol) {
 				return fmt.Errorf("ensure the catalog field has a file:// prefix")
 			}
 		}
 		for _, x := range cfg.Mirror.AdditionalImages {
-			if !strings.Contains(x.Name, fileProtocol) {
-				return fmt.Errorf("ensure the additional name field is set and has file:// prefix")
+			if !strings.Contains(x.Name, dirProtocol) {
+				return fmt.Errorf("ensure the additional name field is set and has dir:// prefix")
 			}
 		}
 	}
+	dest[0] = strings.Replace(dest[0], fileProtocol, dirProtocol, 1)
+
 	if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], fileProtocol) || strings.Contains(dest[0], dirProtocol) {
 		return nil
 	} else {
