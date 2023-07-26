@@ -305,7 +305,7 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 			}
 		}
 	}
-	if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dirProtocol) {
+	if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dirProtocol) || strings.Contains(dest[0], dockerProtocol) {
 		return nil
 	} else {
 		return fmt.Errorf("destination must have either oci://, dir:// or docker:// protocol prefixes")

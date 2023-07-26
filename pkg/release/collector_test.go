@@ -144,6 +144,7 @@ func TestReleaseImageCollector(t *testing.T) {
 
 	t.Run("Testing ReleaseImageCollector : should fail mirror", func(t *testing.T) {
 		os.RemoveAll("../../tests/hold-release/")
+		os.RemoveAll("../../tests/release-images")
 		manifest := &Manifest{Log: log}
 		ex := &Collector{
 			Log:        log,
