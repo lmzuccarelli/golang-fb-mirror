@@ -24,8 +24,8 @@ const (
 	dockerProtocol              string = "docker://"
 	ociProtocol                 string = "oci://"
 	ociProtocolTrimmed          string = "oci:"
-	fileProtocol                string = "dir://"
-	fileProtocolTrimmed         string = "dir:"
+	dirProtocol                 string = "dir://"
+	dirProtocolTrimmed          string = "dir:"
 	releaseImageDir             string = "release-images"
 	releaseIndex                string = "release-index"
 	operatorImageDir            string = "operator-images"
@@ -185,7 +185,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 				component := strings.Split(filepath.Dir(path), "/")
 				img := findRelatedImage(component[len(component)-1], allRelatedImages)
 				if len(img) > 0 {
-					src := fileProtocolTrimmed + filepath.Dir(path)
+					src := dirProtocolTrimmed + filepath.Dir(path)
 					dest := o.Opts.Destination + "/" + img
 					allImages = append(allImages, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
 				} else {
@@ -208,7 +208,7 @@ func batcWorkerConverter(log clog.PluggableLoggerInterface, dir string, images [
 	var result []v1alpha3.CopyImageSchema
 	for _, img := range images {
 		src := dockerProtocol + img.Image
-		dest := fileProtocolTrimmed + strings.Join([]string{dir, "images", img.Name}, "/")
+		dest := dirProtocolTrimmed + strings.Join([]string{dir, "images", img.Name}, "/")
 		// do a lookup on dist first
 		if _, err := os.Stat(dir + "/images/" + img.Name); errors.Is(err, os.ErrNotExist) {
 			err := os.MkdirAll(dir+"/images/"+img.Name, 0750)

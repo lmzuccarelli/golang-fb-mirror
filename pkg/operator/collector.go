@@ -26,6 +26,8 @@ const (
 	dockerProtocol              string = "docker://"
 	ociProtocol                 string = "oci://"
 	ociProtocolTrimmed          string = "oci:"
+	dirProtocol                 string = "dir://"
+	dirProtocolTrimmed          string = "dir:"
 	releaseImageDir             string = "release-images"
 	operatorImageDir            string = "operator-images"
 	releaseImageExtractDir      string = "hold-release"
@@ -271,7 +273,7 @@ func batchWorkerConverter(log clog.PluggableLoggerInterface, dir string, images 
 					s := fmt.Sprintf("%d", timestamp)
 					img.Name = fmt.Sprintf("%x", sha256.Sum256([]byte(s)))[:6]
 				}
-				dest := ociProtocolTrimmed + strings.Join([]string{dir, bundle, irs.Namespace, img.Name}, "/")
+				dest := dirProtocolTrimmed + strings.Join([]string{dir, bundle, irs.Namespace, img.Name}, "/")
 				log.Debug("source %s ", img.Image)
 				log.Debug("destination %s ", dest)
 				result = append(result, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
