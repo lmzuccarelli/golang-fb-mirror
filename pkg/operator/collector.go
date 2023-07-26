@@ -112,12 +112,6 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.Copy
 				}
 				src := dockerProtocol + op.Catalog
 				dest := ociProtocolTrimmed + dir
-				// transport := strings.Split(o.Opts.Destination, "://")[0] + ":"
-				// // copy only handles dir: or docker: not file:
-				// if transport == fileProtocolTrimmed {
-				// 	transport = dirProtocolTrimmed
-				// }
-				// dest := transport + dir
 				err = o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				writer.Flush()
 				if err != nil {
@@ -281,7 +275,7 @@ func batchWorkerConverter(log clog.PluggableLoggerInterface, dir string, images 
 					s := fmt.Sprintf("%d", timestamp)
 					img.Name = fmt.Sprintf("%x", sha256.Sum256([]byte(s)))[:6]
 				}
-				dest := ociProtocolTrimmed + strings.Join([]string{dir, bundle, irs.Namespace, img.Name}, "/")
+				dest := dirProtocolTrimmed + strings.Join([]string{dir, bundle, irs.Namespace, img.Name}, "/")
 				log.Debug("source %s ", img.Image)
 				log.Debug("destination %s ", dest)
 				result = append(result, v1alpha3.CopyImageSchema{Source: src, Destination: dest})
