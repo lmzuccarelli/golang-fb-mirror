@@ -81,15 +81,15 @@ apiVersion: mirror.openshift.io/v1alpha2
 kind: ImageSetConfiguration
 mirror:
   platform:
-    release: file:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/release-images/ocp-release/4.12.0-x86_64
+    release: dir:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/release-images/ocp-release/4.12.0-x86_64
   operators:
-    - catalog: file:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/operator-images/redhat-operator-index/v4.12
+    - catalog: dir:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/operator-images/redhat-operator-index/v4.12
       packages:
       - name: aws-load-balancer-operator
         channels: 
         - name: stable-v0
   additionalImages: 
-    - name: file:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/additional-images
+    - name: dir:///home/lzuccarelli/go/src/github.com/lmzuccarelli/golang-fb-mirror/working-dir/test-lmz/additional-images
     
 ```
 

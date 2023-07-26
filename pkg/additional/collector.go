@@ -91,7 +91,7 @@ func (o *Collector) AdditionalImagesCollector(ctx context.Context) ([]v1alpha3.C
 			o.Log.Error("%v", e)
 		}
 		for _, addImg := range o.Config.Mirror.AdditionalImages {
-			imagesDir := strings.Replace(addImg.Name, "file://", "", 1)
+			imagesDir := strings.Replace(addImg.Name, "dir://", "", 1)
 			e = filepath.Walk(imagesDir, func(path string, info os.FileInfo, err error) error {
 				if err == nil && regex.MatchString(info.Name()) {
 					hld := strings.Split(filepath.Dir(path), additionalImagesDir)

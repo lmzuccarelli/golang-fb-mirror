@@ -162,7 +162,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 		// so tha twe can access the image-references
 		str := strings.Replace(o.Config.Mirror.Platform.Release, "release-images", "hold-release", 1)
 		// remove the file prefix
-		str = strings.Replace(str, "file://", "", 1)
+		str = strings.Replace(str, "dir://", "", 1)
 
 		// get all release images from manifest (json)
 		allRelatedImages, err := o.Manifest.GetReleaseSchema(str + "/" + releaseImageExtractFullPath)
@@ -178,7 +178,7 @@ func (o *Collector) ReleaseImageCollector(ctx context.Context) ([]v1alpha3.CopyI
 
 		// walk through the directory structure to look for manifest.json files
 		// get the base directory and do a lookup on the actual image to mirror
-		imagesDir := strings.Replace(o.Config.Mirror.Platform.Release, "file://", "", 1)
+		imagesDir := strings.Replace(o.Config.Mirror.Platform.Release, "dir://", "", 1)
 		imagesDir = imagesDir + "/images"
 		errFP := filepath.Walk(imagesDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && regex.MatchString(info.Name()) {

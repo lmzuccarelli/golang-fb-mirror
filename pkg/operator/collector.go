@@ -207,7 +207,7 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.Copy
 		for _, op := range o.Config.Mirror.Operators {
 			// Need to fix this - incase their are no operators in the ImageSetConfig
 			for _, pkg := range op.Packages {
-				imagesDir := strings.Replace(op.Catalog, "file://", "", 1)
+				imagesDir := strings.Replace(op.Catalog, "dir://", "", 1)
 				e = filepath.Walk(imagesDir, func(path string, info os.FileInfo, err error) error {
 					if err == nil && regex.MatchString(info.Name()) && strings.Contains(path, pkg.Name) {
 						o.Log.Info("path %s", filepath.Dir(path))
