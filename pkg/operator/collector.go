@@ -26,6 +26,10 @@ const (
 	dockerProtocol              string = "docker://"
 	ociProtocol                 string = "oci://"
 	ociProtocolTrimmed          string = "oci:"
+	dirProtocol                 string = "dir://"
+	dirProtocolTrimmed          string = "dir:"
+	fileProtocol                string = "file://"
+	fileProtocolTrimmed         string = "file:"
 	releaseImageDir             string = "release-images"
 	operatorImageDir            string = "operator-images"
 	releaseImageExtractDir      string = "hold-release"
@@ -108,6 +112,12 @@ func (o *Collector) OperatorImageCollector(ctx context.Context) ([]v1alpha3.Copy
 				}
 				src := dockerProtocol + op.Catalog
 				dest := ociProtocolTrimmed + dir
+				// transport := strings.Split(o.Opts.Destination, "://")[0] + ":"
+				// // copy only handles dir: or docker: not file:
+				// if transport == fileProtocolTrimmed {
+				// 	transport = dirProtocolTrimmed
+				// }
+				// dest := transport + dir
 				err = o.Mirror.Run(ctx, src, dest, "copy", &o.Opts, *writer)
 				writer.Flush()
 				if err != nil {

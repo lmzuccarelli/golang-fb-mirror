@@ -27,6 +27,7 @@ const (
 	dockerProtocol          string = "docker://"
 	ociProtocol             string = "oci://"
 	fileProtocol            string = "file://"
+	dirProtocol             string = "dir://"
 	diskToMirror            string = "diskToMirror"
 	mirrorToDisk            string = "mirrorToDisk"
 	releaseImageDir         string = "release-images"
@@ -260,7 +261,7 @@ func (o *ExecutorSchema) Complete(args []string) {
 
 	// logic to check mode
 	var dest string
-	if strings.Contains(args[0], ociProtocol) || strings.Contains(args[0], fileProtocol) {
+	if strings.Contains(args[0], ociProtocol) || strings.Contains(args[0], fileProtocol) || strings.Contains(args[0], dirProtocol) {
 		o.Opts.Mode = mirrorToDisk
 		dest = workingDir + "/" + strings.Split(args[0], "://")[1]
 		o.Log.Debug("destination %s ", dest)
@@ -307,22 +308,18 @@ func (o *ExecutorSchema) Validate(dest []string) error {
 				return fmt.Errorf("ensure the additional name field is set and has file:// prefix")
 			}
 		}
-		if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], dockerProtocol) || strings.Contains(dest[0], fileProtocol) {
-			return nil
-		} else {
-			return fmt.Errorf("destination must have either oci://, file:// or docker:// protocol prefixes")
-		}
-
 	}
-	return nil
+	if strings.Contains(dest[0], ociProtocol) || strings.Contains(dest[0], fileProtocol) || strings.Contains(dest[0], dirProtocol) {
+		return nil
+	} else {
+		return fmt.Errorf("destination %s must have either oci://, file://, dir:// or docker:// protocol prefixes", dest[0])
+	}
 }
 
 // mergeImages - simple function to append related images
 // nolint
 func mergeImages(base, in []v1alpha3.CopyImageSchema) []v1alpha3.CopyImageSchema {
-	for _, img := range in {
-		base = append(base, img)
-	}
+	base = append(base, in...)
 	return base
 }
 
@@ -331,5 +328,4 @@ func cleanUp() {
 	// clean up logs directory
 	os.RemoveAll(logsDir)
 	//os.RemoveAll(workingDir)
-
 }
